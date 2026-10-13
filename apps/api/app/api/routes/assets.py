@@ -1,13 +1,13 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg import Connection
 from psycopg.rows import dict_row
 
 from app.core.db import get_conn
 from app.schemas.asset import Asset, Candle
-from app.services.candles import Timeframe, get_asset_ref, get_candles
+from app.services.candles import Timeframe, get_asset_ref, get_candles, older_window
 from app.services.quotes import ensure_fresh_quotes
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -63,19 +63,31 @@ def get_asset(symbol: str, conn: Annotated[Connection, Depends(get_conn)]) -> As
 
 @router.get("/{symbol}/candles")
 def get_asset_candles(
-    symbol: str, conn: Annotated[Connection, Depends(get_conn)], timeframe: Timeframe = "4h"
+    symbol: str,
+    conn: Annotated[Connection, Depends(get_conn)],
+    timeframe: Timeframe = "4h",
+    before: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
 ) -> list[Candle]:
+    """Chart candles. Without `before`: the default window of the timeframe, ending now.
+
+    With `before` (the open time of the oldest candle the client has): up to `limit` candles that
+    precede it, so the chart can page back to the first candle of the asset. Empty at the start.
+    """
     asset = get_asset_ref(conn, symbol)
     if asset is None:
         raise HTTPException(404, "Asset not found")
 
-    lookback = CHART_LOOKBACK[timeframe]
-    end = datetime.now(UTC)
-    start = (
-        end - lookback
-        if lookback
-        else datetime.combine(asset.history_since, datetime.min.time(), UTC)
-    )
+    history_start = datetime.combine(asset.history_since, datetime.min.time(), UTC)
+    if before is not None:
+        window = older_window(before.astimezone(UTC), timeframe, limit, history_start)
+        if window is None:
+            return []
+        start, end = window
+    else:
+        lookback = CHART_LOOKBACK[timeframe]
+        end = datetime.now(UTC)
+        start = end - lookback if lookback else history_start
     df = get_candles(conn, asset, timeframe, start, end)
     return [
         Candle(time=t, open=r.open, high=r.high, low=r.low, close=r.close, volume=r.volume)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ChartCandlestickIcon, ChartLineIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/segmented-control"
@@ -64,7 +64,32 @@ function LivePriceChart({
   const [series, setSeries] = useState<Partial<Record<Timeframe, Candle[] | "error">>>({
     [initialTimeframe]: initialCandles,
   })
+  // Timeframes whose first candle has been loaded; `loadingOlder` avoids overlapping page requests.
+  const [atStart, setAtStart] = useState<Partial<Record<Timeframe, true>>>({})
+  const loadingOlder = useRef(false)
   const candles = series[timeframe]
+
+  const loadOlder = useCallback(() => {
+    const current = series[timeframe]
+    if (!Array.isArray(current) || current.length === 0 || atStart[timeframe] || loadingOlder.current) return
+    const requested = timeframe
+    loadingOlder.current = true
+    fetchCandles(symbol, requested, current[0].time)
+      .then((older) => {
+        if (older.length === 0) {
+          setAtStart((s) => ({ ...s, [requested]: true }))
+          return
+        }
+        setSeries((s) => {
+          const loaded = s[requested]
+          return Array.isArray(loaded) ? { ...s, [requested]: [...older, ...loaded] } : s
+        })
+      })
+      .catch(() => {}) // transient: the next drag to the left edge retries
+      .finally(() => {
+        loadingOlder.current = false
+      })
+  }, [symbol, timeframe, series, atStart])
 
   useEffect(() => {
     if (candles) return
@@ -88,7 +113,14 @@ function LivePriceChart({
   if (candles.length < 2) {
     return <p className="py-10 text-center text-caption text-muted-foreground">Sin datos de precio para este periodo.</p>
   }
-  return <PriceChart candles={candles} type={chartType} intraday={timeframe === "1h" || timeframe === "4h"} />
+  return (
+    <PriceChart
+      candles={candles}
+      type={chartType}
+      intraday={timeframe === "1h" || timeframe === "4h"}
+      onReachStart={loadOlder}
+    />
+  )
 }
 
 function ChartSkeleton() {

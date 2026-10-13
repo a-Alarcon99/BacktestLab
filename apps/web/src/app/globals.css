@@ -208,6 +208,13 @@
   h3 {
     @apply text-body font-semibold;
   }
+  /* The native dropdown popup doesn't inherit the translucent field background: give the options a
+     solid theme color so text stays readable in both themes. */
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
   ::selection {
     @apply bg-primary/20;
   }

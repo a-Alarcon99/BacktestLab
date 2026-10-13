@@ -8,6 +8,7 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
+  type LogicalRange,
   type MouseEventParams,
   type UTCTimestamp,
 } from "lightweight-charts"
@@ -17,6 +18,8 @@ import type { Candle } from "@/lib/candles"
 
 /** Candles shown on first render; the rest of the loaded history is reachable by dragging. */
 const INITIAL_VISIBLE = 100
+/** `onReachStart` fires when fewer than this many loaded candles are left to the left of the view. */
+const LOAD_OLDER_THRESHOLD = 30
 
 const axisNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
 const axisSmallNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 4 })
@@ -66,11 +69,15 @@ function chartOptions(colors: ReturnType<typeof readColors>) {
  * through the loaded history, mouse wheel / pinch to zoom, double click on the axes to reset.
  * - `line`: close line in the trend color with a soft gradient fill.
  * - `candles`: OHLC candlesticks, each colored by its own direction (close vs. open).
+ *
+ * `candles` may grow at the start (older history prepended): the viewport then stays on the same
+ * candles. `onReachStart` asks the parent for that older page when the view nears the first candle.
  */
 function PriceChart({
   candles,
   type = "line",
   intraday = false,
+  onReachStart,
   className,
 }: {
   /** Oldest first. */
@@ -78,13 +85,26 @@ function PriceChart({
   type?: "line" | "candles"
   /** Show the hour in the candle tooltip (timeframes below 1 day). */
   intraday?: boolean
+  /** Called (repeatedly) while the view is near the oldest loaded candle. */
+  onReachStart?: () => void
   className?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null>(null)
   const byTime = useRef(new Map<number, Candle>())
+  const loaded = useRef<{ first: number; last: number } | null>(null)
+  const onReachStartRef = useRef(onReachStart)
   const [hovered, setHovered] = useState<Candle | null>(null)
   const [themeVersion, setThemeVersion] = useState(0)
+
+  // Line color follows the trend of the latest window, so prepending history doesn't flip it.
+  const n = candles.length
+  const trendUp = n === 0 || candles[n - 1].close >= candles[Math.max(0, n - INITIAL_VISIBLE)].close
+
+  useEffect(() => {
+    onReachStartRef.current = onReachStart
+  })
 
   // Chart instance + theme change observer.
   useEffect(() => {
@@ -96,27 +116,32 @@ function PriceChart({
     }
     chart.subscribeCrosshairMove(onMove)
 
+    const onRange = (range: LogicalRange | null) => {
+      if (range && range.from < LOAD_OLDER_THRESHOLD) onReachStartRef.current?.()
+    }
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange)
+
     const observer = new MutationObserver(() => setThemeVersion((v) => v + 1))
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
 
     return () => {
       observer.disconnect()
       chart.unsubscribeCrosshairMove(onMove)
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
       chart.remove()
       chartRef.current = null
     }
   }, [])
 
-  // Series for the selected type and data.
+  // Series for the selected type and theme.
   useEffect(() => {
     const chart = chartRef.current!
     const colors = readColors()
     chart.applyOptions(chartOptions(colors))
-    byTime.current = new Map(candles.map((c) => [toTime(c), c]))
 
     let series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">
     if (type === "candles") {
-      const s = chart.addSeries(CandlestickSeries, {
+      series = chart.addSeries(CandlestickSeries, {
         upColor: colors.up,
         downColor: colors.down,
         wickUpColor: colors.up,
@@ -125,11 +150,9 @@ function PriceChart({
         lastValueVisible: false,
         priceLineVisible: false,
       })
-      s.setData(candles.map((c) => ({ time: toTime(c), open: c.open, high: c.high, low: c.low, close: c.close })))
-      series = s
     } else {
-      const trend = candles[candles.length - 1].close >= candles[0].close ? colors.up : colors.down
-      const s = chart.addSeries(AreaSeries, {
+      const trend = trendUp ? colors.up : colors.down
+      series = chart.addSeries(AreaSeries, {
         lineColor: trend,
         topColor: trend.replace(/,[\d.]+\)$/, ",0.16)"),
         bottomColor: trend.replace(/,[\d.]+\)$/, ",0)"),
@@ -137,8 +160,6 @@ function PriceChart({
         lastValueVisible: false,
         priceLineVisible: false,
       })
-      s.setData(candles.map((c) => ({ time: toTime(c), value: c.close })))
-      series = s
     }
     series.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } })
     chart.applyOptions({
@@ -146,21 +167,52 @@ function PriceChart({
         priceFormatter: (p: number) => (p < 1 ? axisSmallNumber : axisNumber).format(p),
       },
     })
+    seriesRef.current = series
 
     // On unmount (and Strict Mode's double effect) the chart effect's cleanup runs first and
     // already disposed the chart together with its series.
     return () => {
+      seriesRef.current = null
       if (chartRef.current) chart.removeSeries(series)
     }
-  }, [candles, type, themeVersion])
+  }, [type, themeVersion, trendUp])
 
-  // Initial viewport: latest candles; older ones are one drag away.
+  // Data and viewport. Declared after the series effect so it always finds the series.
   useEffect(() => {
     const chart = chartRef.current!
-    const n = candles.length
-    if (n > INITIAL_VISIBLE) chart.timeScale().setVisibleLogicalRange({ from: n - INITIAL_VISIBLE, to: n + 2 })
-    else chart.timeScale().fitContent()
-  }, [candles])
+    const series = seriesRef.current!
+    const timeScale = chart.timeScale()
+    byTime.current = new Map(candles.map((c) => [toTime(c), c]))
+
+    const previous = loaded.current
+    const range = timeScale.getVisibleLogicalRange()
+    if (type === "candles") {
+      ;(series as ISeriesApi<"Candlestick">).setData(
+        candles.map((c) => ({ time: toTime(c), open: c.open, high: c.high, low: c.low, close: c.close }))
+      )
+    } else {
+      ;(series as ISeriesApi<"Area">).setData(candles.map((c) => ({ time: toTime(c), value: c.close })))
+    }
+
+    const first = toTime(candles[0])
+    const last = toTime(candles[candles.length - 1])
+    const prepended =
+      previous && previous.last === last && first < previous.first
+        ? candles.findIndex((c) => toTime(c) === previous.first)
+        : -1
+    if (previous && previous.first === first && previous.last === last) {
+      // Same candles on a new series (chart type or theme change): keep the viewport.
+    } else if (prepended > 0 && range) {
+      // Older candles were added to the left: keep looking at the same candles.
+      timeScale.setVisibleLogicalRange({ from: range.from + prepended, to: range.to + prepended })
+    } else if (candles.length > INITIAL_VISIBLE) {
+      // Initial viewport: latest candles; older ones are one drag away.
+      timeScale.setVisibleLogicalRange({ from: candles.length - INITIAL_VISIBLE, to: candles.length + 2 })
+    } else {
+      timeScale.fitContent()
+    }
+    loaded.current = { first, last }
+  }, [candles, type, themeVersion, trendUp])
 
   return (
     <div className={cn("relative h-64 md:h-80", className)}>

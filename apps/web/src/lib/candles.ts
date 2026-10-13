@@ -46,7 +46,13 @@ export type Candle = {
   volume: number
 }
 
-/** Price chart candles: the API picks the window for each timeframe (7 days of 1h … full history of 1M). */
-export function fetchCandles(symbol: string, timeframe: Timeframe): Promise<Candle[]> {
-  return apiFetch<Candle[]>(`/assets/${encodeURIComponent(symbol)}/candles?timeframe=${timeframe}`)
+/**
+ * Price chart candles: the API picks the window for each timeframe (7 days of 1h … full history of
+ * 1M). With `before` (open time of the oldest candle already loaded) it returns the page of
+ * candles preceding it, empty once the first candle of the asset has been reached.
+ */
+export function fetchCandles(symbol: string, timeframe: Timeframe, before?: string): Promise<Candle[]> {
+  const params = new URLSearchParams({ timeframe })
+  if (before) params.set("before", before)
+  return apiFetch<Candle[]>(`/assets/${encodeURIComponent(symbol)}/candles?${params}`)
 }

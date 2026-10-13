@@ -73,6 +73,30 @@ def period_start(ts: datetime, timeframe: Timeframe) -> datetime:
             return day.replace(day=1)
 
 
+_TIMEFRAME_SPAN: dict[Timeframe, timedelta] = {
+    "1h": HOUR,
+    "4h": 4 * HOUR,
+    "1d": 24 * HOUR,
+    "1w": 7 * 24 * HOUR,
+    "1M": 31 * 24 * HOUR,
+}
+
+
+def older_window(
+    before: datetime, timeframe: Timeframe, limit: int, history_start: datetime
+) -> tuple[datetime, datetime] | None:
+    """Range (inclusive open times) of roughly `limit` candles that precede the candle at `before`.
+
+    `before` must be a candle open time of `timeframe`, so the window ends on a period boundary.
+    Returns None when `before` is already at the start of the asset's history.
+    """
+    end = before - HOUR
+    start = max(period_start(before - limit * _TIMEFRAME_SPAN[timeframe], timeframe), history_start)
+    if end < start:
+        return None
+    return min(start, end - MIN_RANGE), end
+
+
 def missing_ranges(
     start: datetime, end: datetime, stored_min: datetime | None, stored_max: datetime | None
 ) -> list[tuple[datetime, datetime]]:

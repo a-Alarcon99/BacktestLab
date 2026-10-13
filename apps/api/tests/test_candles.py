@@ -7,6 +7,7 @@ from app.services.candles import (
     HOUR,
     last_closed_open_time,
     missing_ranges,
+    older_window,
     period_start,
     resample,
 )
@@ -100,3 +101,24 @@ def test_resample_skips_periods_without_data():
     out = resample(df, "1d", until=dt(2026, 1, 4))
     assert list(out.index) == [dt(2026, 1, 1), dt(2026, 1, 3)]
     assert timedelta(days=2) == out.index[1] - out.index[0]
+
+
+class TestOlderWindow:
+    history = dt(2020, 1, 1)
+
+    def test_page_ends_right_before_the_known_candle(self):
+        start, end = older_window(dt(2026, 6, 1, 12), "1h", 100, self.history)
+        assert end == dt(2026, 6, 1, 11)
+        assert start == dt(2026, 5, 28, 8)
+
+    def test_clamped_to_history_start(self):
+        start, end = older_window(dt(2020, 1, 3), "1d", 1000, self.history)
+        assert (start, end) == (self.history, dt(2020, 1, 2, 23))
+
+    def test_short_remainder_is_widened_to_the_minimum_range(self):
+        start, end = older_window(dt(2020, 1, 1, 6), "1h", 1000, self.history)
+        assert end == dt(2020, 1, 1, 5)
+        assert end - start >= timedelta(days=1)
+
+    def test_none_at_start_of_history(self):
+        assert older_window(self.history, "1d", 1000, self.history) is None
