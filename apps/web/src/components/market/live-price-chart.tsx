@@ -88,7 +88,7 @@ function LivePriceChart({
   if (candles.length < 2) {
     return <p className="py-10 text-center text-caption text-muted-foreground">Sin datos de precio para este periodo.</p>
   }
-  return <PriceChart id={symbol} candles={candles} type={chartType} />
+  return <PriceChart candles={candles} type={chartType} intraday={timeframe === "1h" || timeframe === "4h"} />
 }
 
 function ChartSkeleton() {

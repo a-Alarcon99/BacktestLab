@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ChevronRightIcon, FlaskConicalIcon, PlayIcon, StarIcon } from "lucide-react";
+import { ChevronRightIcon, FlaskConicalIcon, StarIcon } from "lucide-react";
 import { BacktestConfig } from "@/components/backtest/backtest-config";
+import { RunBacktestButton } from "@/components/backtest/run-backtest-button";
 import { AssetHeader } from "@/components/market/asset-header";
 import { AssetViewProvider } from "@/components/market/asset-view";
 import { ChartSkeleton, LivePriceChart, PriceChartControls } from "@/components/market/live-price-chart";
@@ -36,51 +37,72 @@ export async function generateMetadata({ params }: PageProps<"/assets/[symbol]">
 
 const resultMetrics = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de acierto", "Operaciones"];
 
-export default async function AssetPage({ params }: PageProps<"/assets/[symbol]">) {
+/** `params` is URL data: it is resolved inside <Suspense> so the shell can be served instantly. */
+export default function AssetPage({ params }: PageProps<"/assets/[symbol]">) {
+  return (
+    <Suspense fallback={<AssetPageSkeleton />}>
+      <AssetContent params={params} />
+    </Suspense>
+  );
+}
+
+function AssetPageSkeleton() {
+  return (
+    <div
+      aria-hidden
+      className="container-page grid gap-6 py-6 lg:grid-cols-[var(--container-aside)_minmax(0,1fr)] lg:gap-8 lg:py-8"
+    >
+      <div className="h-96 animate-pulse rounded-lg bg-muted/40" />
+      <div className="h-[40rem] animate-pulse rounded-lg bg-muted/40" />
+    </div>
+  );
+}
+
+async function AssetContent({ params }: Pick<PageProps<"/assets/[symbol]">, "params">) {
   const [info, today] = await Promise.all([getAssetInfo((await params).symbol), getToday()]);
   if (!info) notFound();
 
   return (
-    <div className="container-page grid gap-6 py-6 pb-24 lg:grid-cols-[var(--container-aside)_minmax(0,1fr)] lg:gap-8 lg:py-8 lg:pb-8">
-      {/* Asset panel: first block on mobile, sticky column on desktop */}
-      <aside className="flex flex-col gap-6 lg:sticky lg:top-[calc(var(--spacing-header)+2rem)] lg:self-start">
-        <nav aria-label="Ruta" className="flex items-center gap-1 text-caption text-muted-foreground">
-          <Link href="/" className="hover:text-foreground">
-            Activos
-          </Link>
-          <ChevronRightIcon className="size-3" />
-          <span className="font-semibold text-foreground">{info.name}</span>
-        </nav>
+    <AssetViewProvider>
+      <div className="container-page grid gap-6 py-6 pb-24 lg:grid-cols-[var(--container-aside)_minmax(0,1fr)] lg:gap-8 lg:py-8 lg:pb-8">
+        {/* Asset panel: first block on mobile, sticky column on desktop */}
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-[calc(var(--spacing-header)+2rem)] lg:self-start">
+          <nav aria-label="Ruta" className="flex items-center gap-1 text-caption text-muted-foreground">
+            <Link href="/" className="hover:text-foreground">
+              Activos
+            </Link>
+            <ChevronRightIcon className="size-3" />
+            <span className="font-semibold text-foreground">{info.name}</span>
+          </nav>
 
-        <Suspense fallback={<QuoteSkeleton />}>
-          <AssetQuote symbol={info.symbol} />
-        </Suspense>
+          <Suspense fallback={<QuoteSkeleton />}>
+            <AssetQuote symbol={info.symbol} />
+          </Suspense>
 
-        <div className="hidden gap-2 lg:flex">
-          <Link href="#backtest" className={buttonVariants({ size: "lg", variant: "soft", className: "flex-1" })}>
-            <FlaskConicalIcon data-icon="inline-start" />
-            Configurar backtest
-          </Link>
-          <Button size="icon-lg" variant="outline" aria-label="Añadir a favoritos">
-            <StarIcon />
-          </Button>
-        </div>
+          <div className="hidden gap-2 lg:flex">
+            <Link href="#backtest" className={buttonVariants({ size: "lg", variant: "soft", className: "flex-1" })}>
+              <FlaskConicalIcon data-icon="inline-start" />
+              Configurar backtest
+            </Link>
+            <Button size="icon-lg" variant="outline" aria-label="Añadir a favoritos">
+              <StarIcon />
+            </Button>
+          </div>
 
-        <Suspense fallback={<AssetStats info={info} />}>
-          <LiveAssetStats info={info} />
-        </Suspense>
+          <Suspense fallback={<AssetStats info={info} />}>
+            <LiveAssetStats info={info} />
+          </Suspense>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge shape="pill" variant="primary">
-            {info.category}
-          </Badge>
-          <Badge shape="pill">Spot</Badge>
-          <Badge shape="pill">OHLCV</Badge>
-        </div>
-      </aside>
+          <div className="flex flex-wrap gap-2">
+            <Badge shape="pill" variant="primary">
+              {info.category}
+            </Badge>
+            <Badge shape="pill">Spot</Badge>
+            <Badge shape="pill">OHLCV</Badge>
+          </div>
+        </aside>
 
-      {/* Main column: the timeframe is shared by the backtest config and the price chart */}
-      <AssetViewProvider>
+        {/* Main column: the chart and the backtest config keep independent timeframes */}
         <div className="flex min-w-0 flex-col gap-6">
           <BacktestConfig symbol={info.symbol} historySince={info.historySince} today={today} />
 
@@ -122,16 +144,13 @@ export default async function AssetPage({ params }: PageProps<"/assets/[symbol]"
             </CardContent>
           </Card>
         </div>
-      </AssetViewProvider>
 
-      {/* Mobile: primary action pinned to the bottom edge */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur lg:hidden">
-        <Button size="lg" type="button" className="w-full">
-          <PlayIcon data-icon="inline-start" />
-          Ejecutar backtest
-        </Button>
+        {/* Mobile: primary action pinned to the bottom edge */}
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 backdrop-blur lg:hidden">
+          <RunBacktestButton />
+        </div>
       </div>
-    </div>
+    </AssetViewProvider>
   );
 }
 

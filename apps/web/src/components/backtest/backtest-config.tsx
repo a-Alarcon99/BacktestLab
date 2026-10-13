@@ -1,33 +1,26 @@
 "use client"
 
+import { useState } from "react"
 import { PlayIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, Input, Select } from "@/components/ui/input"
 import { useAssetView } from "@/components/market/asset-view"
+import { BacktestReplayDialog } from "./backtest-replay"
 import { SegmentedControl } from "@/components/ui/segmented-control"
-import { timeframes, type Timeframe } from "@/lib/candles"
+import { defaultTimeframe, estimateCandles, timeframes, type Timeframe } from "@/lib/candles"
 import { formatDate } from "@/lib/format"
 
+const strategies = [
+  { value: "sma-cross", label: "Cruce de medias (SMA 20/50)" },
+  { value: "rsi", label: "RSI reversión a la media" },
+  { value: "breakout", label: "Ruptura de rango (Donchian)" },
+]
 const rangePresets = ["1M", "3M", "6M", "1A", "3A", "Máx."] as const
 
-const HOUR_MS = 3_600_000
 // es-ES skips grouping for 4-digit numbers by default ("6570"); force "6.570".
 const candleCount = new Intl.NumberFormat("es-ES", { useGrouping: "always" })
-const timeframeMs: Record<Timeframe, number> = {
-  "1h": HOUR_MS,
-  "4h": 4 * HOUR_MS,
-  "1d": 24 * HOUR_MS,
-  "1w": 7 * 24 * HOUR_MS,
-  "1M": 30.44 * 24 * HOUR_MS,
-}
-
-/** Approximate number of candles in [from, to] (both inclusive whole UTC days). */
-function estimateCandles(from: string, to: string, timeframe: Timeframe) {
-  const span = Date.parse(to) - Date.parse(from) + 24 * HOUR_MS
-  return Math.max(0, Math.floor(span / timeframeMs[timeframe]))
-}
 
 /** Default range: the "3A" preset (3 years back from `today`), clamped to the available history. */
 function defaultFrom(today: string, historySince: string) {
@@ -40,7 +33,7 @@ function defaultFrom(today: string, historySince: string) {
 /**
  * Backtest parameters: date range (presets + explicit from/to) and timeframe first,
  * because they define the dataset; strategy and capital after. Nothing is submitted yet; the
- * timeframe is shared with the price chart through <AssetViewProvider>.
+ * timeframe is independent from the price chart's. "Ejecutar backtest" opens the replay pop-up.
  */
 function BacktestConfig({
   symbol,
@@ -52,7 +45,9 @@ function BacktestConfig({
   /** Current UTC date (YYYY-MM-DD): upper bound and default end of the range. */
   today: string
 }) {
-  const { timeframe, setTimeframe } = useAssetView()
+  const [timeframe, setTimeframe] = useState<Timeframe>(defaultTimeframe)
+  const [strategy, setStrategy] = useState(strategies[0].label)
+  const { replayOpen, setReplayOpen } = useAssetView()
   const from = defaultFrom(today, historySince)
   const to = today
   const candles = estimateCandles(from, to, timeframe)
@@ -88,10 +83,17 @@ function BacktestConfig({
         </Field>
 
         <Field label="Estrategia" htmlFor="strategy">
-          <Select id="strategy" name="strategy" defaultValue="sma-cross">
-            <option value="sma-cross">Cruce de medias (SMA 20/50)</option>
-            <option value="rsi">RSI reversión a la media</option>
-            <option value="breakout">Ruptura de rango (Donchian)</option>
+          <Select
+            id="strategy"
+            name="strategy"
+            value={strategy}
+            onChange={(event) => setStrategy(event.target.value)}
+          >
+            {strategies.map((s) => (
+              <option key={s.value} value={s.label}>
+                {s.label}
+              </option>
+            ))}
           </Select>
         </Field>
 
@@ -110,11 +112,17 @@ function BacktestConfig({
           <span className="font-semibold text-foreground">{symbol}/USDT</span> · {formatDate(from)} → {formatDate(to)} ·{" "}
           {timeframe} · ≈ {candleCount.format(candles)} velas
         </p>
-        <Button size="lg" type="button" className="hidden lg:inline-flex">
+        <Button size="lg" type="button" className="hidden lg:inline-flex" onClick={() => setReplayOpen(true)}>
           <PlayIcon data-icon="inline-start" />
           Ejecutar backtest
         </Button>
       </footer>
+
+      <BacktestReplayDialog
+        open={replayOpen}
+        onOpenChange={setReplayOpen}
+        run={{ symbol, strategy, timeframe, from, to, mode: "new" }}
+      />
     </Card>
   )
 }

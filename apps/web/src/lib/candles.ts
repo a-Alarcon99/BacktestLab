@@ -8,6 +8,21 @@ export type Timeframe = (typeof timeframes)[number]
 
 export const defaultTimeframe: Timeframe = "4h"
 
+const HOUR_MS = 3_600_000
+const timeframeMs: Record<Timeframe, number> = {
+  "1h": HOUR_MS,
+  "4h": 4 * HOUR_MS,
+  "1d": 24 * HOUR_MS,
+  "1w": 7 * 24 * HOUR_MS,
+  "1M": 30.44 * 24 * HOUR_MS,
+}
+
+/** Approximate number of candles in [from, to] (both inclusive whole UTC days). */
+export function estimateCandles(from: string, to: string, timeframe: Timeframe) {
+  const span = Date.parse(to) - Date.parse(from) + 24 * HOUR_MS
+  return Math.max(0, Math.floor(span / timeframeMs[timeframe]))
+}
+
 export type Candle = {
   time: string
   open: number

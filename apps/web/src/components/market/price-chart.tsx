@@ -1,143 +1,210 @@
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import {
+  AreaSeries,
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type MouseEventParams,
+  type UTCTimestamp,
+} from "lightweight-charts"
 import { cn } from "cn"
 import { formatPrice } from "@/lib/format"
 import type { Candle } from "@/lib/candles"
 
+/** Candles shown on first render; the rest of the loaded history is reachable by dragging. */
+const INITIAL_VISIBLE = 100
+
+const axisNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
+const axisSmallNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 4 })
+const volumeNumber = new Intl.NumberFormat("es-ES", { notation: "compact", maximumFractionDigits: 2 })
+
+const toTime = (c: Candle) => (Date.parse(c.time) / 1000) as UTCTimestamp
+
+/** The chart canvas can't parse `oklch()` / `var()`: resolve a CSS token to an rgba() string. */
+function readColor(token: string) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+  const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!
+  ctx.fillStyle = value
+  ctx.fillRect(0, 0, 1, 1)
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+  return `rgba(${r},${g},${b},${a / 255})`
+}
+
+function readColors() {
+  return {
+    text: readColor("--muted-foreground"),
+    grid: readColor("--border"),
+    crosshair: readColor("--border-strong"),
+    up: readColor("--up"),
+    down: readColor("--down"),
+  }
+}
+
+function chartOptions(colors: ReturnType<typeof readColors>) {
+  return {
+    layout: {
+      background: { type: ColorType.Solid, color: "transparent" },
+      textColor: colors.text,
+      attributionLogo: false,
+    },
+    grid: { vertLines: { visible: false }, horzLines: { color: colors.grid } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+    crosshair: {
+      vertLine: { color: colors.crosshair, labelBackgroundColor: colors.text },
+      horzLine: { color: colors.crosshair, labelBackgroundColor: colors.text },
+    },
+  }
+}
+
 /**
- * Single-series price chart (static SVG) with recessive horizontal grid, price ticks on the right
- * and a dashed reference line at the first close.
- * - `line`: 2px close line in the trend color with a soft gradient fill.
+ * Interactive price chart (lightweight-charts): hover a candle to read its OHLCV, drag to pan
+ * through the loaded history, mouse wheel / pinch to zoom, double click on the axes to reset.
+ * - `line`: close line in the trend color with a soft gradient fill.
  * - `candles`: OHLC candlesticks, each colored by its own direction (close vs. open).
  */
 function PriceChart({
-  id,
   candles,
   type = "line",
+  intraday = false,
   className,
 }: {
-  id: string
-  /** At least 2 candles, oldest first. */
+  /** Oldest first. */
   candles: Candle[]
   type?: "line" | "candles"
+  /** Show the hour in the candle tooltip (timeframes below 1 day). */
+  intraday?: boolean
   className?: string
 }) {
-  const closes = candles.map((c) => c.close)
-  const min = Math.min(...(type === "candles" ? candles.map((c) => c.low) : closes))
-  const max = Math.max(...(type === "candles" ? candles.map((c) => c.high) : closes))
-  const range = max - min || 1
-  const W = 1000
-  const H = 360
-  const x = (i: number) => (i / (closes.length - 1)) * W
-  const y = (p: number) => 12 + (1 - (p - min) / range) * (H - 24)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const byTime = useRef(new Map<number, Candle>())
+  const [hovered, setHovered] = useState<Candle | null>(null)
+  const [themeVersion, setThemeVersion] = useState(0)
 
-  const first = closes[0]
-  const last = closes[closes.length - 1]
-  const up = last >= first
-  const ticks = Array.from({ length: 5 }, (_, i) => max - (range * i) / 4)
+  // Chart instance + theme change observer.
+  useEffect(() => {
+    const chart = createChart(containerRef.current!, { autoSize: true, ...chartOptions(readColors()) })
+    chartRef.current = chart
+
+    const onMove = (param: MouseEventParams) => {
+      setHovered(param.point && param.time ? (byTime.current.get(param.time as number) ?? null) : null)
+    }
+    chart.subscribeCrosshairMove(onMove)
+
+    const observer = new MutationObserver(() => setThemeVersion((v) => v + 1))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+
+    return () => {
+      observer.disconnect()
+      chart.unsubscribeCrosshairMove(onMove)
+      chart.remove()
+      chartRef.current = null
+    }
+  }, [])
+
+  // Series for the selected type and data.
+  useEffect(() => {
+    const chart = chartRef.current!
+    const colors = readColors()
+    chart.applyOptions(chartOptions(colors))
+    byTime.current = new Map(candles.map((c) => [toTime(c), c]))
+
+    let series: ISeriesApi<"Candlestick"> | ISeriesApi<"Area">
+    if (type === "candles") {
+      const s = chart.addSeries(CandlestickSeries, {
+        upColor: colors.up,
+        downColor: colors.down,
+        wickUpColor: colors.up,
+        wickDownColor: colors.down,
+        borderVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      s.setData(candles.map((c) => ({ time: toTime(c), open: c.open, high: c.high, low: c.low, close: c.close })))
+      series = s
+    } else {
+      const trend = candles[candles.length - 1].close >= candles[0].close ? colors.up : colors.down
+      const s = chart.addSeries(AreaSeries, {
+        lineColor: trend,
+        topColor: trend.replace(/,[\d.]+\)$/, ",0.16)"),
+        bottomColor: trend.replace(/,[\d.]+\)$/, ",0)"),
+        lineWidth: 2,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      s.setData(candles.map((c) => ({ time: toTime(c), value: c.close })))
+      series = s
+    }
+    series.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } })
+    chart.applyOptions({
+      localization: {
+        priceFormatter: (p: number) => (p < 1 ? axisSmallNumber : axisNumber).format(p),
+      },
+    })
+
+    // On unmount (and Strict Mode's double effect) the chart effect's cleanup runs first and
+    // already disposed the chart together with its series.
+    return () => {
+      if (chartRef.current) chart.removeSeries(series)
+    }
+  }, [candles, type, themeVersion])
+
+  // Initial viewport: latest candles; older ones are one drag away.
+  useEffect(() => {
+    const chart = chartRef.current!
+    const n = candles.length
+    if (n > INITIAL_VISIBLE) chart.timeScale().setVisibleLogicalRange({ from: n - INITIAL_VISIBLE, to: n + 2 })
+    else chart.timeScale().fitContent()
+  }, [candles])
 
   return (
-    <div className={cn("flex gap-3", up ? "text-up" : "text-down", className)}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={`Evolución del precio de ${formatPrice(first)} a ${formatPrice(last)}`}
-        className="h-64 min-w-0 flex-1 md:h-80"
-      >
-        {ticks.map((t) => (
-          <line
-            key={t}
-            x1={0}
-            x2={W}
-            y1={y(t)}
-            y2={y(t)}
-            stroke="var(--border)"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-        <line
-          x1={0}
-          x2={W}
-          y1={y(first)}
-          y2={y(first)}
-          stroke="var(--muted-foreground)"
-          strokeDasharray="4 4"
-          strokeOpacity={0.5}
-          vectorEffect="non-scaling-stroke"
-        />
-        {type === "candles" ? (
-          <Candlesticks candles={candles} width={W} y={y} />
-        ) : (
-          <Line id={id} values={closes} x={x} y={y} width={W} height={H} />
-        )}
-      </svg>
-      <div className="num relative hidden w-20 shrink-0 text-caption text-muted-foreground sm:block">
-        {ticks.map((t) => (
-          <span
-            key={t}
-            className="absolute right-0 -translate-y-1/2"
-            style={{ top: `${(y(t) / H) * 100}%` }}
-          >
-            {formatPrice(t)}
-          </span>
-        ))}
-      </div>
+    <div className={cn("relative h-64 md:h-80", className)}>
+      <div ref={containerRef} className="size-full" role="img" aria-label="Gráfico de precio interactivo" />
+      {hovered && <CandleInfo candle={hovered} intraday={intraday} />}
     </div>
   )
 }
 
-function Line({
-  id,
-  values,
-  x,
-  y,
-  width,
-  height,
-}: {
-  id: string
-  values: number[]
-  x: (i: number) => number
-  y: (p: number) => number
-  width: number
-  height: number
-}) {
-  const line = values.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join("")
-  const area = `${line}L${width},${height}L0,${height}Z`
+/** Legend pinned to the top-left corner with the hovered candle's data. */
+function CandleInfo({ candle, intraday }: { candle: Candle; intraday: boolean }) {
+  const change = ((candle.close - candle.open) / candle.open) * 100
+  const date = new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    ...(intraday ? { hour: "2-digit", minute: "2-digit" } : {}),
+    timeZone: "UTC",
+  }).format(new Date(candle.time))
   return (
-    <>
-      <defs>
-        <linearGradient id={`fill-${id}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity={0.16} />
-          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <path d={area} fill={`url(#fill-${id})`} />
-      <path
-        d={line}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </>
+    <div className="num pointer-events-none absolute top-1 left-1 z-10 flex max-w-[calc(100%-5rem)] flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md bg-card/90 px-2 py-1 text-caption">
+      <span className="font-semibold text-foreground">
+        {date}
+        {intraday && " UTC"}
+      </span>
+      <Value label="A" value={candle.open} />
+      <Value label="Máx" value={candle.high} />
+      <Value label="Mín" value={candle.low} />
+      <Value label="C" value={candle.close} />
+      <span className={change >= 0 ? "text-up" : "text-down"}>
+        {change >= 0 ? "+" : ""}
+        {change.toFixed(2).replace(".", ",")}%
+      </span>
+      <span className="text-muted-foreground">Vol {volumeNumber.format(candle.volume)}</span>
+    </div>
   )
 }
 
-/** One slot per candle: 1px wick from high to low, body from open to close (60% of the slot). */
-function Candlesticks({ candles, width, y }: { candles: Candle[]; width: number; y: (p: number) => number }) {
-  const slot = width / candles.length
-  const body = slot * 0.6
-  return candles.map((c, i) => {
-    const cx = (i + 0.5) * slot
-    const top = y(Math.max(c.open, c.close))
-    const bottom = y(Math.min(c.open, c.close))
-    return (
-      <g key={c.time} className={c.close >= c.open ? "text-up" : "text-down"}>
-        <line x1={cx} x2={cx} y1={y(c.high)} y2={y(c.low)} stroke="currentColor" vectorEffect="non-scaling-stroke" />
-        <rect x={cx - body / 2} y={top} width={body} height={Math.max(bottom - top, 1)} fill="currentColor" />
-      </g>
-    )
-  })
+function Value({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="text-muted-foreground">
+      {label} <span className="text-foreground">{formatPrice(value)}</span>
+    </span>
+  )
 }
 
 export { PriceChart }
