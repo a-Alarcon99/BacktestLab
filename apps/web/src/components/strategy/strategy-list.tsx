@@ -1,26 +1,46 @@
+"use client"
+
+import { useState } from "react"
 import Link from "next/link"
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { formatDate } from "@/lib/format"
-import type { Strategy } from "@/lib/strategies-mock"
+import { deleteStrategy, useStrategies } from "@/lib/storage/strategies"
+import { describeRule, ruleFamily, type Strategy } from "@/lib/strategy"
 import { ruleKinds } from "./rule-kind"
 import { RunStrategyButton, type RunnableAsset } from "./run-strategy-button"
 
+const capitalFormat = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
+
+/** "3 estrategias creadas", once the browser data is read. */
+function StrategyCount() {
+  const { data } = useStrategies()
+  if (!data) return null
+  return (
+    <span className="num font-semibold text-foreground">
+      {data.length} {data.length === 1 ? "estrategia creada" : "estrategias creadas"}.
+    </span>
+  )
+}
+
 /**
- * Grid of saved strategies, closed by a "new strategy" placeholder card. `assets` and `today`
- * feed the run-backtest pop-up of each card.
+ * Grid of the user's strategies, closed by a "new strategy" placeholder card. `assets` and
+ * `today` feed the run-backtest pop-up of each card.
  */
-function StrategyList({
-  strategies,
-  assets,
-  today,
-}: {
-  strategies: Strategy[]
-  assets: RunnableAsset[]
-  today: string
-}) {
+function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: string }) {
+  const { data: strategies } = useStrategies()
+
+  if (!strategies) {
+    return (
+      <div aria-hidden className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="h-64 animate-pulse rounded-xl bg-muted/40" />
+        <div className="hidden h-64 animate-pulse rounded-xl bg-muted/40 md:block" />
+      </div>
+    )
+  }
+
   return (
     <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {strategies.map((strategy) => (
@@ -36,7 +56,9 @@ function StrategyList({
           <span className="flex size-10 items-center justify-center rounded-full bg-accent text-accent-foreground">
             <PlusIcon className="size-5" />
           </span>
-          <span className="font-semibold text-foreground">Nueva estrategia</span>
+          <span className="font-semibold text-foreground">
+            {strategies.length === 0 ? "Crea tu primera estrategia" : "Nueva estrategia"}
+          </span>
           <span className="max-w-56 text-caption">Combina reglas de compra y venta para crear la tuya.</span>
         </Link>
       </li>
@@ -53,6 +75,7 @@ function StrategyCard({
   assets: RunnableAsset[]
   today: string
 }) {
+  const [confirming, setConfirming] = useState(false)
   const buy = strategy.rules.filter((r) => r.side === "buy")
   const sell = strategy.rules.filter((r) => r.side === "sell")
 
@@ -64,16 +87,36 @@ function StrategyCard({
           <div className="flex flex-wrap gap-2">
             <Badge variant="up">{buy.length} compra</Badge>
             <Badge variant="down">{sell.length} venta</Badge>
+            <Badge variant="outline" className="num">
+              {capitalFormat.format(strategy.initialCapital)} USDT
+            </Badge>
           </div>
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label={`Eliminar ${strategy.name}`} className="hover:bg-down-soft hover:text-down">
-          <Trash2Icon />
-        </Button>
+        {confirming ? (
+          <span className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => deleteStrategy(strategy.id)}>
+              Eliminar
+            </Button>
+          </span>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Eliminar ${strategy.name}`}
+            className="hover:bg-down-soft hover:text-down"
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2Icon />
+          </Button>
+        )}
       </header>
 
       <ul className="flex flex-1 flex-col gap-2.5 px-4 py-4 md:px-5">
         {strategy.rules.map((rule) => {
-          const { Icon, label } = ruleKinds[rule.kind]
+          const { Icon, label } = ruleKinds[ruleFamily(rule)]
           return (
             <li key={rule.id} className="flex items-start gap-2.5">
               <span
@@ -87,7 +130,7 @@ function StrategyCard({
                   {rule.side === "buy" ? "Compra" : "Venta"} · {label}
                 </span>
               </span>
-              <span className="min-w-0">{rule.summary}</span>
+              <span className="min-w-0">{describeRule(rule)}</span>
             </li>
           )
         })}
@@ -106,11 +149,11 @@ function StrategyCard({
             <PencilIcon data-icon="inline-start" />
             Editar
           </Link>
-          <RunStrategyButton strategy={strategy.name} assets={assets} today={today} />
+          <RunStrategyButton strategy={strategy} assets={assets} today={today} />
         </span>
       </footer>
     </article>
   )
 }
 
-export { StrategyList }
+export { StrategyCount, StrategyList }

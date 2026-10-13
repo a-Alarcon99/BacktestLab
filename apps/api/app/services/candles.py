@@ -42,6 +42,15 @@ class AssetRef:
     history_since: date
 
 
+def get_asset_ref(conn: Connection, symbol: str) -> AssetRef | None:
+    """Active asset by symbol (case-insensitive)."""
+    row = conn.execute(
+        "select id, binance_symbol, history_since from assets where is_active and symbol = upper(%s)",
+        (symbol,),
+    ).fetchone()
+    return AssetRef(*row) if row else None
+
+
 def last_closed_open_time(now: datetime) -> datetime:
     """Open time of the most recent fully closed 1h candle."""
     return now.astimezone(UTC).replace(minute=0, second=0, microsecond=0) - HOUR

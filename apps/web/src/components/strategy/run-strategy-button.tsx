@@ -7,25 +7,21 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Field, Input, Select } from "@/components/ui/input"
 import { SegmentedControl } from "@/components/ui/segmented-control"
-import { defaultTimeframe, estimateCandles, timeframes, type Timeframe } from "@/lib/candles"
+import {
+  defaultTimeframe,
+  estimateCandles,
+  presetFrom,
+  rangePresets,
+  timeframes,
+  type RangePreset,
+  type Timeframe,
+} from "@/lib/candles"
 import { formatDate } from "@/lib/format"
+import type { Strategy } from "@/lib/strategy"
 
 export type RunnableAsset = { symbol: string; name: string; historySince: string }
 
-const rangePresets = ["1M", "3M", "6M", "1A", "3A", "Máx."] as const
-type RangePreset = (typeof rangePresets)[number]
-
-const presetMonths: Record<Exclude<RangePreset, "Máx.">, number> = { "1M": 1, "3M": 3, "6M": 6, "1A": 12, "3A": 36 }
 const candleCount = new Intl.NumberFormat("es-ES", { useGrouping: "always" })
-
-/** Start date of a preset ending today, clamped to the asset's available history. */
-function presetFrom(preset: RangePreset, today: string, historySince: string) {
-  if (preset === "Máx.") return historySince
-  const d = new Date(today)
-  d.setUTCMonth(d.getUTCMonth() - presetMonths[preset])
-  const from = d.toISOString().slice(0, 10)
-  return from > historySince ? from : historySince
-}
 
 /**
  * "Ejecutar backtest" button of a strategy card. Opens a pop-up in two steps:
@@ -36,7 +32,7 @@ function RunStrategyButton({
   assets,
   today,
 }: {
-  strategy: string
+  strategy: Strategy
   assets: RunnableAsset[]
   today: string
 }) {
@@ -76,7 +72,7 @@ function RunStrategyButton({
                   <FlaskConicalIcon className="size-5" />
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <DialogTitle className="truncate text-title font-bold">{strategy}</DialogTitle>
+                  <DialogTitle className="truncate text-title font-bold">{strategy.name}</DialogTitle>
                   <DialogDescription className="text-caption text-muted-foreground">
                     Elige dónde y cuándo probar la estrategia.
                   </DialogDescription>

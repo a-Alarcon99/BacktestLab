@@ -23,6 +23,20 @@ export function estimateCandles(from: string, to: string, timeframe: Timeframe) 
   return Math.max(0, Math.floor(span / timeframeMs[timeframe]))
 }
 
+export const rangePresets = ["1M", "3M", "6M", "1A", "3A", "Máx."] as const
+export type RangePreset = (typeof rangePresets)[number]
+
+const presetMonths: Record<Exclude<RangePreset, "Máx.">, number> = { "1M": 1, "3M": 3, "6M": 6, "1A": 12, "3A": 36 }
+
+/** Start date (YYYY-MM-DD) of a preset ending `today`, clamped to the asset's available history. */
+export function presetFrom(preset: RangePreset, today: string, historySince: string) {
+  if (preset === "Máx.") return historySince
+  const d = new Date(today)
+  d.setUTCMonth(d.getUTCMonth() - presetMonths[preset])
+  const from = d.toISOString().slice(0, 10)
+  return from > historySince ? from : historySince
+}
+
 export type Candle = {
   time: string
   open: number

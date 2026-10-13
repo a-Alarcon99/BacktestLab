@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PlusIcon } from "lucide-react";
-import { StrategyList } from "@/components/strategy/strategy-list";
+import { StrategyCount, StrategyList } from "@/components/strategy/strategy-list";
 import { buttonVariants } from "@/components/ui/button";
 import { getAssetCatalog, getToday } from "@/lib/market";
-import { strategies } from "@/lib/strategies-mock";
 
 export const metadata: Metadata = { title: "Estrategias" };
 
@@ -16,8 +15,7 @@ export default async function StrategiesPage() {
         <div className="flex flex-col gap-2">
           <h1>Estrategias</h1>
           <p className="max-w-2xl text-muted-foreground">
-            Reglas de compra y venta reutilizables en tus backtests.{" "}
-            <span className="num font-semibold text-foreground">{strategies.length} estrategias</span> creadas.
+            Reglas de compra y venta reutilizables en tus backtests, guardadas en este navegador. <StrategyCount />
           </p>
         </div>
         <Link
@@ -29,7 +27,7 @@ export default async function StrategiesPage() {
         </Link>
       </section>
 
-      <StrategyList strategies={strategies} assets={catalog} today={today} />
+      <StrategyList assets={catalog} today={today} />
     </div>
   );
 }

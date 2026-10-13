@@ -1,14 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ChevronRightIcon } from "lucide-react"
 import { AssetAvatar } from "@/components/market/asset-avatar"
 import { PriceChange } from "@/components/market/price-change"
 import { Sparkline } from "@/components/market/sparkline"
 import { Badge } from "@/components/ui/badge"
-import type { BacktestSummary } from "@/lib/backtests-mock"
+import type { BacktestRecord } from "@/lib/backtests"
 import { formatDate } from "@/lib/format"
-import { BacktestReplayDialog } from "./backtest-replay"
+import { BacktestReplayDialog, type ReplayRun } from "./backtest-replay"
 
 const decimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const oneDecimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -20,28 +20,27 @@ const rowGrid =
 const columns = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de acierto", "Operaciones"]
 
 /**
- * History of backtest runs, newest first. Each row opens the replay pop-up of that backtest:
- * stacked card on mobile, table-like row from `lg`.
+ * History of backtest runs, newest first. Each row re-runs that backtest (same strategy
+ * snapshot) in the replay pop-up: stacked card on mobile, table-like row from `lg`.
  */
-function BacktestList({ backtests }: { backtests: BacktestSummary[] }) {
-  const [selected, setSelected] = useState<BacktestSummary | null>(null)
+function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
+  const [selected, setSelected] = useState<BacktestRecord | null>(null)
+  const run = useMemo<ReplayRun | null>(
+    () =>
+      selected && {
+        symbol: selected.symbol,
+        strategy: selected.strategy,
+        timeframe: selected.timeframe,
+        from: selected.from,
+        to: selected.to,
+        mode: "review",
+      },
+    [selected]
+  )
   return (
     <>
       <BacktestTable backtests={backtests} onOpen={setSelected} />
-      {selected && (
-        <BacktestReplayDialog
-          open
-          onOpenChange={(open) => !open && setSelected(null)}
-          run={{
-            symbol: selected.symbol,
-            strategy: selected.strategy,
-            timeframe: selected.timeframe,
-            from: selected.from,
-            to: selected.to,
-            mode: "review",
-          }}
-        />
-      )}
+      {run && <BacktestReplayDialog open onOpenChange={(open) => !open && setSelected(null)} run={run} />}
     </>
   )
 }
@@ -50,8 +49,8 @@ function BacktestTable({
   backtests,
   onOpen,
 }: {
-  backtests: BacktestSummary[]
-  onOpen: (backtest: BacktestSummary) => void
+  backtests: BacktestRecord[]
+  onOpen: (backtest: BacktestRecord) => void
 }) {
   return (
     <section aria-label="Últimos backtests" className="overflow-hidden rounded-xl border bg-card text-card-foreground">
@@ -80,7 +79,7 @@ function BacktestTable({
   )
 }
 
-function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestSummary; onOpen: () => void }) {
+function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestRecord; onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -93,7 +92,7 @@ function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestSummary; onOpe
         <div className="flex min-w-0 flex-col gap-1">
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
             <span className="font-semibold">{b.symbol}/USDT</span>
-            <span className="truncate text-muted-foreground">{b.strategy}</span>
+            <span className="truncate text-muted-foreground">{b.strategy.name}</span>
           </span>
           <span className="num flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted-foreground">
             <Badge variant="outline" className="h-5 px-1.5">
@@ -110,19 +109,19 @@ function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestSummary; onOpe
 
       <dl className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:contents">
         <Metric label={columns[0]}>
-          <PriceChange value={b.returnPct} variant="pill" />
+          <PriceChange value={b.stats.returnPct} variant="pill" />
         </Metric>
         <Metric label={columns[1]}>
-          <span className="num font-semibold">−{decimal.format(Math.abs(b.maxDrawdownPct))}%</span>
+          <span className="num font-semibold">−{decimal.format(Math.abs(b.stats.maxDrawdownPct))}%</span>
         </Metric>
         <Metric label={columns[2]}>
-          <span className="num font-semibold">{decimal.format(b.sharpe)}</span>
+          <span className="num font-semibold">{decimal.format(b.stats.sharpe)}</span>
         </Metric>
         <Metric label={columns[3]}>
-          <span className="num font-semibold">{oneDecimal.format(b.winRatePct)}%</span>
+          <span className="num font-semibold">{oneDecimal.format(b.stats.winRatePct)}%</span>
         </Metric>
         <Metric label={columns[4]}>
-          <span className="num font-semibold">{b.trades}</span>
+          <span className="num font-semibold">{b.stats.trades}</span>
         </Metric>
       </dl>
 

@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 
 from app.core.db import get_conn
 from app.schemas.asset import Asset, Candle
-from app.services.candles import AssetRef, Timeframe, get_candles
+from app.services.candles import Timeframe, get_asset_ref, get_candles
 from app.services.quotes import ensure_fresh_quotes
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -65,13 +65,9 @@ def get_asset(symbol: str, conn: Annotated[Connection, Depends(get_conn)]) -> As
 def get_asset_candles(
     symbol: str, conn: Annotated[Connection, Depends(get_conn)], timeframe: Timeframe = "4h"
 ) -> list[Candle]:
-    row = conn.execute(
-        "select id, binance_symbol, history_since from assets where is_active and symbol = upper(%s)",
-        (symbol,),
-    ).fetchone()
-    if row is None:
+    asset = get_asset_ref(conn, symbol)
+    if asset is None:
         raise HTTPException(404, "Asset not found")
-    asset = AssetRef(*row)
 
     lookback = CHART_LOOKBACK[timeframe]
     end = datetime.now(UTC)
