@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, Input, Select } from "@/components/ui/input"
+import { presetStrategies } from "@/lib/preset-strategies"
 import { saveStrategy, useStrategies } from "@/lib/storage/strategies"
 import {
   conditionKinds,
@@ -59,7 +60,8 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const errors = useMemo(() => {
-    const taken = (strategies ?? []).filter((s) => s.id !== strategy?.id).map((s) => s.name)
+    const own = (strategies ?? []).filter((s) => s.id !== strategy?.id).map((s) => s.name)
+    const taken = [...presetStrategies.map((s) => s.name), ...own]
     return validateStrategy(draft, taken)
   }, [draft, strategies, strategy?.id])
 

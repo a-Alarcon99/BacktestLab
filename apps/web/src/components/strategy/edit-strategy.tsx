@@ -3,13 +3,16 @@
 import Link from "next/link"
 import { ChevronRightIcon } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
+import { isPreset } from "@/lib/preset-strategies"
 import { useStrategy } from "@/lib/storage/strategies"
+import { PresetDetail } from "./preset-detail"
 import { StrategyForm } from "./strategy-form"
 
 /** Edit page body: looks the strategy up in this browser. */
 function EditStrategy({ id }: { id: string }) {
   const { data: strategy } = useStrategy(id)
 
+  if (isPreset(id)) return <PresetDetail id={id} />
   if (strategy === undefined) return <div aria-hidden className="h-96 animate-pulse rounded-lg bg-muted/40" />
   if (strategy === null) {
     return (

@@ -20,7 +20,8 @@ import {
   type Timeframe,
 } from "@/lib/candles"
 import { formatDate } from "@/lib/format"
-import { useStrategies } from "@/lib/storage/strategies"
+import { isPreset } from "@/lib/preset-strategies"
+import { useRunnableStrategies } from "@/lib/storage/strategies"
 import { ReplayPlayer, type ReplayRun } from "./backtest-replay"
 
 const DEFAULT_PRESET: RangePreset = "3A"
@@ -44,7 +45,7 @@ function BacktestConfig({
   /** Current UTC date (YYYY-MM-DD): upper bound and default end of the range. */
   today: string
 }) {
-  const { data: strategies } = useStrategies()
+  const { data: strategies } = useRunnableStrategies()
   const [timeframe, setTimeframe] = useState<Timeframe>(defaultTimeframe)
   const [preset, setPreset] = useState<RangePreset | null>(DEFAULT_PRESET)
   const [from, setFrom] = useState(() => presetFrom(DEFAULT_PRESET, today, historySince))
@@ -52,8 +53,9 @@ function BacktestConfig({
   const [strategyId, setStrategyId] = useState<string | null>(null)
   const { replayOpen, setReplayOpen } = useAssetView()
 
-  // Defaults to the most recently updated strategy until the user picks one.
-  const strategy = strategies?.find((s) => s.id === strategyId) ?? strategies?.[0]
+  // Defaults to the user's most recently updated strategy (else the first preset) until one is picked.
+  const strategy =
+    strategies?.find((s) => s.id === strategyId) ?? strategies?.find((s) => !isPreset(s.id)) ?? strategies?.[0]
   const valid = from !== "" && to !== "" && from <= to && from >= historySince && to <= today
   const candles = valid ? estimateCandles(from, to, timeframe) : 0
   const rangeOk = valid && candles >= 2
@@ -134,8 +136,11 @@ function BacktestConfig({
               <>
                 Capital inicial <span className="num font-semibold">{capitalFormat.format(strategy.initialCapital)} USDT</span>{" "}
                 · comisión <span className="num font-semibold">{capitalFormat.format(strategy.feePct)} %</span> ·{" "}
-                <Link href={`/strategies/${strategy.id}/edit`} className="text-primary hover:underline">
-                  Editar estrategia
+                <Link
+                  href={`/strategies/${strategy.id}${isPreset(strategy.id) ? "" : "/edit"}`}
+                  className="text-primary hover:underline"
+                >
+                  {isPreset(strategy.id) ? "Ver reglas" : "Editar estrategia"}
                 </Link>
               </>
             )

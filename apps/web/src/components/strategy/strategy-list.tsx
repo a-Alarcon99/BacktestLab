@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { EyeIcon, LockIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { cn } from "cn"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { formatDate } from "@/lib/format"
+import { presetInfo, presetStrategies } from "@/lib/preset-strategies"
 import { deleteStrategy, useStrategies } from "@/lib/storage/strategies"
 import { describeRule, ruleFamily, type Strategy } from "@/lib/strategy"
 import { ruleKinds } from "./rule-kind"
@@ -42,6 +43,28 @@ function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: strin
   }
 
   return (
+    <>
+    <section aria-labelledby="presets-title" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <h2 id="presets-title" className="text-title font-bold">
+          Estrategias predefinidas
+        </h2>
+        <p className="text-caption text-muted-foreground">
+          Una por horizonte temporal. No se pueden modificar, pero puedes ver sus reglas y ejecutarlas.
+        </p>
+      </div>
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {presetStrategies.map((strategy) => (
+          <li key={strategy.id}>
+            <StrategyCard strategy={strategy} assets={assets} today={today} />
+          </li>
+        ))}
+      </ul>
+    </section>
+    <section aria-labelledby="own-title" className="flex flex-col gap-3">
+      <h2 id="own-title" className="text-title font-bold">
+        Mis estrategias
+      </h2>
     <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {strategies.map((strategy) => (
         <li key={strategy.id}>
@@ -63,6 +86,8 @@ function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: strin
         </Link>
       </li>
     </ul>
+    </section>
+    </>
   )
 }
 
@@ -76,6 +101,7 @@ function StrategyCard({
   today: string
 }) {
   const [confirming, setConfirming] = useState(false)
+  const preset = presetInfo[strategy.id]
   const buy = strategy.rules.filter((r) => r.side === "buy")
   const sell = strategy.rules.filter((r) => r.side === "sell")
 
@@ -85,6 +111,7 @@ function StrategyCard({
         <div className="flex min-w-0 flex-col gap-2">
           <h2 className="truncate text-body font-semibold">{strategy.name}</h2>
           <div className="flex flex-wrap gap-2">
+            {preset && <Badge>{preset.horizonLabel}</Badge>}
             <Badge variant="up">{buy.length} compra</Badge>
             <Badge variant="down">{sell.length} venta</Badge>
             <Badge variant="outline" className="num">
@@ -92,7 +119,12 @@ function StrategyCard({
             </Badge>
           </div>
         </div>
-        {confirming ? (
+        {preset ? (
+          <span className="mt-1 shrink-0 text-muted-foreground" title="Predefinida: no se puede modificar">
+            <LockIcon className="size-4" />
+            <span className="sr-only">Predefinida: no se puede modificar</span>
+          </span>
+        ) : confirming ? (
           <span className="flex shrink-0 items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
               Cancelar
@@ -138,16 +170,24 @@ function StrategyCard({
 
       <footer className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t px-4 py-3 md:px-5">
         <span className="text-caption text-muted-foreground">
-          Actualizada el <span className="num">{formatDate(strategy.updatedAt)}</span>
+          {preset ? (
+            <>
+              Velas: <span className="num">{preset.timeframe}</span>
+            </>
+          ) : (
+            <>
+              Actualizada el <span className="num">{formatDate(strategy.updatedAt)}</span>
+            </>
+          )}
         </span>
         <span className="flex items-center gap-2">
           <Link
-            href={`/strategies/${strategy.id}/edit`}
-            aria-label={`Editar ${strategy.name}`}
+            href={preset ? `/strategies/${strategy.id}` : `/strategies/${strategy.id}/edit`}
+            aria-label={`${preset ? "Ver reglas de" : "Editar"} ${strategy.name}`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            <PencilIcon data-icon="inline-start" />
-            Editar
+            {preset ? <EyeIcon data-icon="inline-start" /> : <PencilIcon data-icon="inline-start" />}
+            {preset ? "Ver reglas" : "Editar"}
           </Link>
           <RunStrategyButton strategy={strategy} assets={assets} today={today} />
         </span>

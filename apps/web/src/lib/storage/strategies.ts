@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { getPreset, presetStrategies } from "@/lib/preset-strategies"
 import type { Strategy, StrategyDraft } from "@/lib/strategy"
 import { createLocalStore, isObject, parseList } from "./local-store"
 
@@ -26,10 +27,20 @@ export function useStrategies() {
   return { data, isLoading: data === undefined }
 }
 
-/** `null` when it doesn't exist. */
+/** Built-in presets followed by the user's strategies: everything a backtest can run. */
+export function useRunnableStrategies() {
+  const { data } = useStrategies()
+  const all = useMemo(() => (data ? [...presetStrategies, ...data] : undefined), [data])
+  return { data: all, isLoading: all === undefined }
+}
+
+/** `null` when it doesn't exist. Presets are found too (read-only). */
 export function useStrategy(id: string) {
   const { data, isLoading } = useStrategies()
-  const strategy = useMemo(() => (data ? (data.find((s) => s.id === id) ?? null) : undefined), [data, id])
+  const strategy = useMemo(
+    () => getPreset(id) ?? (data ? (data.find((s) => s.id === id) ?? null) : undefined),
+    [data, id]
+  )
   return { data: strategy, isLoading }
 }
 
@@ -37,7 +48,9 @@ export function useStrategy(id: string) {
 export async function saveStrategy(draft: StrategyDraft, id?: string): Promise<Strategy> {
   const strategies = store.read()
   const name = draft.name.trim()
-  if (strategies.some((s) => s.id !== id && s.name.trim().toLowerCase() === name.toLowerCase())) {
+  if (id && getPreset(id)) throw new Error("Las estrategias predefinidas no se pueden modificar.")
+  const taken = [...presetStrategies, ...strategies.filter((s) => s.id !== id)]
+  if (taken.some((s) => s.name.trim().toLowerCase() === name.toLowerCase())) {
     throw new Error("Ya tienes una estrategia con este nombre.")
   }
   const now = new Date().toISOString()
@@ -57,5 +70,6 @@ export async function saveStrategy(draft: StrategyDraft, id?: string): Promise<S
 }
 
 export async function deleteStrategy(id: string): Promise<void> {
+  if (getPreset(id)) return
   store.write(store.read().filter((s) => s.id !== id))
 }
