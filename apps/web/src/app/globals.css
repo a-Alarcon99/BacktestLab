@@ -1,0 +1,214 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * BacktestLab design system
+ * - Data-dense fintech UI: 14px base text, tabular numerals, hairline borders.
+ * - Cool neutral palette (slight blue tint) + one saturated brand blue.
+ * - Semantic market colors: --up (gains) / --down (losses). Never use them decoratively.
+ * - Radius scale anchored at 8px; pills (rounded-full) only for chips/badges.
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
+
+  /* Layout */
+  --spacing-header: 4rem;
+  --container-page: 90rem;
+  --container-aside: 23rem;
+
+  /* Type scale (size / line-height) */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.5rem;
+  --text-heading: 1.5rem;
+  --text-heading--line-height: 2rem;
+  --text-price: 2rem;
+  --text-price--line-height: 2.5rem;
+}
+
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2 0.03 262);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.03 262);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.03 262);
+  --primary: oklch(0.56 0.2 266);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.965 0.006 262);
+  --secondary-foreground: oklch(0.2 0.03 262);
+  --muted: oklch(0.965 0.006 262);
+  --muted-foreground: oklch(0.52 0.03 260);
+  --accent: oklch(0.95 0.025 266);
+  --accent-foreground: oklch(0.45 0.18 266);
+  --destructive: oklch(0.6 0.21 25);
+  --border: oklch(0.94 0.008 262);
+  --border-strong: oklch(0.87 0.015 262);
+  --input: oklch(0.89 0.012 262);
+  --ring: oklch(0.56 0.2 266);
+
+  --up: oklch(0.66 0.16 158);
+  --up-soft: oklch(0.66 0.16 158 / 12%);
+  --down: oklch(0.6 0.21 25);
+  --down-soft: oklch(0.6 0.21 25 / 12%);
+
+  --chart-1: oklch(0.56 0.2 266);
+  --chart-2: oklch(0.66 0.16 158);
+  --chart-3: oklch(0.75 0.15 75);
+  --chart-4: oklch(0.6 0.2 320);
+  --chart-5: oklch(0.65 0.12 220);
+
+  --sidebar: oklch(0.985 0.003 262);
+  --sidebar-foreground: oklch(0.2 0.03 262);
+  --sidebar-primary: oklch(0.56 0.2 266);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.025 266);
+  --sidebar-accent-foreground: oklch(0.45 0.18 266);
+  --sidebar-border: oklch(0.94 0.008 262);
+  --sidebar-ring: oklch(0.56 0.2 266);
+}
+
+.dark {
+  --background: oklch(0.17 0.02 265);
+  --foreground: oklch(0.96 0.005 262);
+  --card: oklch(0.205 0.022 265);
+  --card-foreground: oklch(0.96 0.005 262);
+  --popover: oklch(0.225 0.024 265);
+  --popover-foreground: oklch(0.96 0.005 262);
+  --primary: oklch(0.65 0.18 266);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.25 0.022 265);
+  --secondary-foreground: oklch(0.96 0.005 262);
+  --muted: oklch(0.25 0.022 265);
+  --muted-foreground: oklch(0.7 0.025 262);
+  --accent: oklch(0.3 0.06 266);
+  --accent-foreground: oklch(0.85 0.08 266);
+  --destructive: oklch(0.68 0.19 25);
+  --border: oklch(1 0 0 / 8%);
+  --border-strong: oklch(1 0 0 / 16%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.65 0.18 266);
+
+  --up: oklch(0.72 0.16 158);
+  --up-soft: oklch(0.72 0.16 158 / 16%);
+  --down: oklch(0.68 0.19 25);
+  --down-soft: oklch(0.68 0.19 25 / 16%);
+
+  --chart-1: oklch(0.65 0.18 266);
+  --chart-2: oklch(0.72 0.16 158);
+  --chart-3: oklch(0.8 0.14 75);
+  --chart-4: oklch(0.7 0.18 320);
+  --chart-5: oklch(0.72 0.11 220);
+
+  --sidebar: oklch(0.205 0.022 265);
+  --sidebar-foreground: oklch(0.96 0.005 262);
+  --sidebar-primary: oklch(0.65 0.18 266);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.3 0.06 266);
+  --sidebar-accent-foreground: oklch(0.85 0.08 266);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.65 0.18 266);
+}
+
+/* Centered page width with responsive gutters (16px → 24px → 32px). */
+@utility container-page {
+  width: 100%;
+  max-width: var(--container-page);
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (width >= 48rem) {
+    padding-inline: 1.5rem;
+  }
+  @media (width >= 80rem) {
+    padding-inline: 2rem;
+  }
+}
+
+/* Aligned figures for prices, percentages and table columns. */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "zero" 0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: light;
+    scroll-padding-top: calc(var(--spacing-header) + 1rem);
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-body text-foreground;
+  }
+  h1 {
+    @apply text-heading font-bold tracking-tight;
+  }
+  h2 {
+    @apply text-title font-bold tracking-tight;
+  }
+  h3 {
+    @apply text-body font-semibold;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
