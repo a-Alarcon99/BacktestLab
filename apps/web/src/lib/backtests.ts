@@ -29,6 +29,8 @@ export type BacktestTrade = {
   /** USDT spent (buy) or received (sell), fees included. */
   amount: number
   pnl: number | null
+  /** `Rule.id` of the strategy rule that placed the order. */
+  ruleId: string
 }
 
 export type BacktestStats = {

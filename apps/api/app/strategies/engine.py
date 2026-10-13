@@ -140,6 +140,7 @@ def simulate(
                         "quantity": q,
                         "amount": proceeds,
                         "pnl": pnl,
+                        "rule_id": r.rule.id,
                     }
                 )
                 sold = True
@@ -165,6 +166,7 @@ def simulate(
                             "quantity": q,
                             "amount": amount,
                             "pnl": None,
+                            "rule_id": r.rule.id,
                         }
                     )
                 break
@@ -225,6 +227,7 @@ def to_result(sim: Simulation, initial_capital: float) -> BacktestResult:
             quantity=t["quantity"],
             amount=t["amount"],
             pnl=t["pnl"],
+            rule_id=t["rule_id"],
         )
         for t in sim.trades
     ]

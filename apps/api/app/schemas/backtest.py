@@ -155,6 +155,8 @@ class Trade(CamelModel):
     amount: float
     # Realized PnL of a sell.
     pnl: float | None = None
+    # `Rule.id` of the rule that placed the order.
+    rule_id: str
 
 
 class BacktestStats(CamelModel):

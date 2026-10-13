@@ -1,10 +1,12 @@
 // Timing of the backtest replay animation.
 
 export const REPLAY_MIN_SECONDS = 5
-export const REPLAY_MAX_SECONDS = 20
+export const REPLAY_MAX_SECONDS = 25
+/** Candles revealed per second. The chart shows a ~100-candle window that scrolls at this pace. */
+export const REPLAY_CANDLES_PER_SECOND = 50
 
-/** 5 s up to 100 candles, 20 s from 3.000 candles on, linear in between. */
-export function replayDuration(candleCount: number) {
-  const t = Math.min(1, Math.max(0, (candleCount - 100) / 2900))
-  return (REPLAY_MIN_SECONDS + (REPLAY_MAX_SECONDS - REPLAY_MIN_SECONDS) * t) * 1000
+/** Duration (ms) for `steps` drawn candles: fixed reveal speed, between 5 s and 30 s. */
+export function replayDuration(steps: number) {
+  const seconds = steps / REPLAY_CANDLES_PER_SECOND
+  return Math.min(REPLAY_MAX_SECONDS, Math.max(REPLAY_MIN_SECONDS, seconds)) * 1000
 }
