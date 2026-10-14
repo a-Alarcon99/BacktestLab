@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, Input, Select } from "@/components/ui/input"
 import { rangePresets, timeframes, type RangePreset, type Timeframe } from "@/lib/candles"
 import { presetStrategies } from "@/lib/preset-strategies"
+import { LimitCta } from "@/components/plan/plan-usage"
 import { saveStrategy, useStrategies } from "@/lib/storage/strategies"
 import {
   conditionKinds,
@@ -45,7 +46,7 @@ type UpdateRule = (id: string, update: (rule: Rule) => Rule) => void
 /**
  * Strategy form: name, capital, fee and the buy/sell rule builders. Creates a new strategy, or
  * edits `strategy` when given. A rule = 1–3 conditions that must all hold + the order size; rules
- * and conditions can't contradict each other (`findConflicts`). Saves to this browser.
+ * and conditions can't contradict each other (`findConflicts`). Saved on the server, subject to the plan quota.
  */
 function StrategyForm({ strategy }: { strategy?: Strategy }) {
   const router = useRouter()
@@ -258,7 +259,12 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
                 activarse con el mismo indicador a la vez. Máximo {MAX_RULES} reglas.
               </p>
             )}
-            {saveError && <p className="text-caption font-semibold text-down">{saveError}</p>}
+            {saveError && (
+              <div className="flex flex-col gap-2">
+                <p className="text-caption font-semibold text-down">{saveError}</p>
+                <LimitCta />
+              </div>
+            )}
           </CardContent>
           <footer className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end md:px-5 lg:flex-col-reverse xl:flex-row">
             <Link href="/strategies" className={buttonVariants({ variant: "outline", size: "lg" })}>

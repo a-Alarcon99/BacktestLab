@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     quote_ttl_seconds: int = 30
     market_cap_ttl_seconds: int = 3600
 
+    # Shared secret the web app sends in `X-Internal-Key` when it proxies a backtest. The web app
+    # enforces the user quotas, so `/backtests/run` refuses any caller without it (and, unset,
+    # refuses everyone). Generate one with `openssl rand -hex 32` and set the same value in both apps.
+    internal_api_key: str | None = None
+
     # --- Abuse / cost protection (see SECURITY.md) ---
     # Set to false in production: hides /docs, /redoc and /openapi.json.
     docs_enabled: bool = True

@@ -1,5 +1,6 @@
 """HTTP-level protections: body size cap, per-IP/global rate limits, security headers."""
 
+import hmac
 import math
 from collections.abc import Awaitable, Callable
 
@@ -86,6 +87,17 @@ def _rule_for(request: Request, s: Settings) -> list[tuple[str, int, float]] | N
     return [("default", s.rate_limit_default_per_minute, 60)]
 
 
+def path_is_backtest_run(request: Request) -> bool:
+    return request.method == "POST" and request.url.path == "/backtests/run"
+
+
+def _has_valid_internal_key(request: Request, s: Settings) -> bool:
+    given = request.headers.get("x-internal-key")
+    return bool(s.internal_api_key and given) and hmac.compare_digest(
+        given.encode(), s.internal_api_key.encode()
+    )
+
+
 def make_rate_limit_middleware(
     s: Settings,
 ) -> Callable[[Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]]:
@@ -95,10 +107,16 @@ def make_rate_limit_middleware(
         if s.rate_limit_enabled:
             checks = _rule_for(request, s)
             if checks:
+                # Backtests only arrive through the web app, which is the one peer here: it
+                # authenticates with the internal key and forwards the real client address, so
+                # that header is trusted for such calls (otherwise every user shares one bucket).
+                hops = s.trusted_proxy_hops
+                if path_is_backtest_run(request) and _has_valid_internal_key(request, s):
+                    hops = max(hops, 1)
                 ip = client_ip(
                     request.client.host if request.client else None,
                     request.headers.get("x-forwarded-for"),
-                    s.trusted_proxy_hops,
+                    hops,
                 )
                 waits = [limiter.hit(f"{b}:{ip}", n, w) for b, n, w in checks]
                 # The global bucket is only charged for requests that passed the per-IP limits.

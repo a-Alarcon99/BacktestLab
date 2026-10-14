@@ -4,10 +4,33 @@ import { nextCookies } from "better-auth/next-js";
 
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { sendVerificationEmail } from "@/lib/server/mail";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   plugins: [nextCookies()],
+  // Passwords are hashed by Better Auth (scrypt, per-user salt); never stored or logged in clear.
+  // An account can't sign in until its email is verified by following the emailed link.
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
+    requireEmailVerification: true,
+    revokeSessionsOnPasswordReset: true,
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    autoSignInAfterVerification: true,
+    expiresIn: 60 * 60,
+    sendVerificationEmail: async ({ user, url }) => {
+      // Not awaited: a slow mail provider must not reveal whether the account exists (timing).
+      void sendVerificationEmail(user.email, user.name, url);
+    },
+  },
+  // A week-long session refreshed daily while in use; the cookie is httpOnly + SameSite=Lax
+  // (and Secure in production).
+  session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
   // Enabled explicitly (Better Auth only enables it in production by default). The counters live
   // in memory, so they are per server instance: on serverless/multi-instance deployments this is
   // best effort and the edge firewall must enforce the real limit (see SECURITY.md).

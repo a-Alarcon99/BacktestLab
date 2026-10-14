@@ -45,7 +45,11 @@ def client():
     limiter.reset()
     # Requests that pass validation would need a DB; a sentinel makes that visible.
     app.dependency_overrides[get_conn] = lambda: None
-    yield TestClient(app, raise_server_exceptions=False)
+    yield TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"X-Internal-Key": get_settings().internal_api_key or ""},
+    )
     app.dependency_overrides.clear()
     limiter.reset()
 
@@ -92,7 +96,25 @@ def test_backtest_endpoint_is_rate_limited_per_ip(client):
     assert res.headers["Retry-After"].isdigit()
 
 
-def test_spoofed_forwarded_for_does_not_bypass_limit(client):
+def test_spoofed_forwarded_for_does_not_bypass_limit(client, monkeypatch):
+    # Without the internal key (and no trusted proxy) the header is ignored: only the peer counts.
+    monkeypatch.setattr(get_settings(), "trusted_proxy_hops", 0)
+    limit = get_settings().rate_limit_backtest_per_minute
+    bad = {"X-Internal-Key": "wrong"}
+    for i in range(limit):
+        client.post(
+            "/backtests/run",
+            json=body(symbol="!!"),
+            headers={**bad, "X-Forwarded-For": f"1.1.1.{i}"},
+        )
+    res = client.post(
+        "/backtests/run", json=body(symbol="!!"), headers={**bad, "X-Forwarded-For": "9.9.9.9"}
+    )
+    assert res.status_code == 429
+
+
+def test_web_app_forwarded_ip_is_used_with_internal_key(client):
+    # The web app is the single peer: its forwarded client address keeps users in separate buckets.
     limit = get_settings().rate_limit_backtest_per_minute
     for i in range(limit):
         client.post(
@@ -101,7 +123,7 @@ def test_spoofed_forwarded_for_does_not_bypass_limit(client):
     res = client.post(
         "/backtests/run", json=body(symbol="!!"), headers={"X-Forwarded-For": "9.9.9.9"}
     )
-    assert res.status_code == 429
+    assert res.status_code != 429
 
 
 def test_oversized_body_is_rejected(client):

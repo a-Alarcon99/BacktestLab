@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FlaskConicalIcon } from "lucide-react";
 import { RecentBacktests } from "@/components/backtest/recent-backtests";
 import { buttonVariants } from "@/components/ui/button";
-import { MAX_BACKTESTS } from "@/lib/backtests";
+import { PlanUsage } from "@/components/plan/plan-usage";
 
 export const metadata: Metadata = { title: "Backtests" };
 
@@ -14,8 +14,8 @@ export default function BacktestsPage() {
         <div className="flex flex-col gap-2">
           <h1>Últimos backtests</h1>
           <p className="max-w-2xl text-muted-foreground">
-            Tus {MAX_BACKTESTS} ejecuciones más recientes, guardadas en este navegador. Abre una para volver a ver la
-            animación de la estrategia sobre el histórico.
+            Tus ejecuciones más recientes (según tu plan), guardadas en este navegador. Abre una para volver a ver la
+            animación de la estrategia sobre el histórico. Borrar una no devuelve el cupo consumido.
           </p>
         </div>
         <Link href="/" className={buttonVariants({ size: "lg", variant: "soft", className: "self-start sm:self-auto" })}>
@@ -23,6 +23,8 @@ export default function BacktestsPage() {
           Nuevo backtest
         </Link>
       </section>
+
+      <PlanUsage />
 
       <RecentBacktests />
     </div>

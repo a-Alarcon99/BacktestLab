@@ -15,6 +15,20 @@
       "when": 1791500744972,
       "tag": "0001_seed_assets",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792000361607,
+      "tag": "0002_auth_plans_usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792000365065,
+      "tag": "0003_seed_plans",
+      "breakpoints": true
     }
   ]
 }

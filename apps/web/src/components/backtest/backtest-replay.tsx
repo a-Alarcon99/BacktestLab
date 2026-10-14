@@ -23,6 +23,7 @@ import {
 import { estimateCandles } from "@/lib/candles"
 import { formatDate, formatPrice } from "@/lib/format"
 import { replayDuration } from "@/lib/replay"
+import { LimitCta } from "@/components/plan/plan-usage"
 import { addBacktest } from "@/lib/storage/backtests"
 import { describeSize, ruleName, specOf, type Rule } from "@/lib/strategy"
 
@@ -148,6 +149,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
             </span>
             <p className="font-semibold">No se pudo ejecutar el backtest</p>
             <p className="max-w-md text-caption text-muted-foreground">{state.message}</p>
+            <LimitCta />
           </>
         )}
       </div>

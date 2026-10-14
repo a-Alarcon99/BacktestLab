@@ -1,11 +1,12 @@
-import { ApiError, apiFetch } from "@/lib/api"
+import { refreshMe } from "@/lib/session"
+import { webFetch, WebApiError } from "@/lib/web-api"
 import type { Timeframe } from "@/lib/candles"
 import type { Strategy } from "@/lib/strategy"
 
 // Client-safe: backtest request/result types (mirror `app/schemas/backtest.py`) and the saved
 // summary of a run.
 
-/** Runs kept in the history. */
+/** Runs kept in the history when the plan doesn't say otherwise (the plan's `historySize` wins). */
 export const MAX_BACKTESTS = 10
 
 export type BacktestRequest = {
@@ -80,8 +81,21 @@ export type BacktestRecord = {
   equity: number[]
 }
 
-export function runBacktest(request: BacktestRequest, signal?: AbortSignal): Promise<BacktestResult> {
-  return apiFetch<BacktestResult>("/backtests/run", { method: "POST", body: JSON.stringify(request), signal })
+/**
+ * Runs through this app's server, which checks and consumes the plan quota before calling the
+ * engine; the engine itself rejects calls that don't come from it.
+ */
+export async function runBacktest(request: BacktestRequest, signal?: AbortSignal): Promise<BacktestResult> {
+  try {
+    return await webFetch<BacktestResult>("/api/backtests/run", {
+      method: "POST",
+      body: JSON.stringify(request),
+      signal,
+    })
+  } finally {
+    // The quota may have changed (consumed, refunded or exhausted).
+    if (!signal?.aborted) void refreshMe()
+  }
 }
 
 export function recordFromResult(request: BacktestRequest, result: BacktestResult): BacktestRecord {
@@ -98,19 +112,26 @@ export function recordFromResult(request: BacktestRequest, result: BacktestResul
 
 /** User-facing message for a failed run. */
 export function describeBacktestError(error: unknown) {
-  if (!(error instanceof ApiError)) return "No se pudo conectar con el servidor de backtesting."
+  if (!(error instanceof WebApiError)) return "No se pudo conectar con el servidor de backtesting."
+  if (error.status === 429 && error.code === "limit_reached") return error.message
+  if (error.status === 429) return "Demasiadas peticiones. Espera un momento antes de reintentarlo."
+  if (error.code === "engine_misconfigured")
+    return "El motor de backtesting no acepta las peticiones de la web (revisa INTERNAL_API_KEY en ambas apps)."
+  if (error.status === 403) return "Petición bloqueada por origen. Abre la web desde la URL configurada en NEXT_PUBLIC_APP_URL."
+  if (error.status === 502 || error.status === 503) return error.message
   if (error.status === 404) return "El activo no existe o no está disponible."
   if (error.status === 422) {
-    try {
-      const { detail } = JSON.parse(error.body) as { detail: unknown }
-      if (typeof detail === "string") {
-        return detail === "Not enough candles in the range" || detail === "The range must be at least 1 day"
-          ? "No hay suficientes velas en el rango elegido. Amplía las fechas o usa una temporalidad menor."
-          : detail
-      }
-      if (Array.isArray(detail) && detail.every((d) => typeof d === "string")) return detail.join(" ")
-    } catch {}
+    const { detail } = error
+    if (typeof detail === "string") {
+      return detail === "Not enough candles in the range" || detail === "The range must be at least 1 day"
+        ? "No hay suficientes velas en el rango elegido. Amplía las fechas o usa una temporalidad menor."
+        : detail
+    }
+    if (Array.isArray(detail) && detail.every((d) => typeof d === "string")) return detail.join(" ")
     return "La estrategia o los parámetros del backtest no son válidos."
   }
   return "El servidor de backtesting ha fallado. Inténtalo de nuevo."
 }
+
+/** `true` when the failure is a quota limit (the UI offers to sign up / shows the plan). */
+export const isLimitError = (error: unknown) => error instanceof WebApiError && error.code === "limit_reached"

@@ -3,8 +3,9 @@
 import { useState } from "react"
 import Link from "next/link"
 import { MenuIcon, XIcon } from "lucide-react"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { siteConfig } from "@/config/site"
+import { UserMenu } from "./user-menu"
 
 export function MobileNav() {
   const [open, setOpen] = useState(false)
@@ -34,13 +35,8 @@ export function MobileNav() {
               </Link>
             ))}
           </nav>
-          <div className="container-page grid grid-cols-2 gap-3 py-4">
-            <Link href="/login" className={buttonVariants({ variant: "outline", size: "lg" })}>
-              Entrar
-            </Link>
-            <Link href="/signup" className={buttonVariants({ size: "lg" })}>
-              Crear cuenta
-            </Link>
+          <div className="container-page py-4" onClick={() => setOpen(false)}>
+            <UserMenu stacked />
           </div>
         </div>
       )}

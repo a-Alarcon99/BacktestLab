@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PlusIcon } from "lucide-react";
+import { PlanUsage } from "@/components/plan/plan-usage";
 import { StrategyCount, StrategyList } from "@/components/strategy/strategy-list";
 import { buttonVariants } from "@/components/ui/button";
 import { getAssetCatalog, getToday } from "@/lib/market";
@@ -15,7 +16,7 @@ export default async function StrategiesPage() {
         <div className="flex flex-col gap-2">
           <h1>Estrategias</h1>
           <p className="max-w-2xl text-muted-foreground">
-            Reglas de compra y venta reutilizables en tus backtests, guardadas en este navegador. <StrategyCount />
+            Reglas de compra y venta reutilizables en tus backtests, asociadas a tu cuenta (o a este navegador si eres invitado). <StrategyCount />
           </p>
         </div>
         <Link
@@ -26,6 +27,8 @@ export default async function StrategiesPage() {
           Nueva estrategia
         </Link>
       </section>
+
+      <PlanUsage />
 
       <StrategyList assets={catalog} today={today} />
     </div>

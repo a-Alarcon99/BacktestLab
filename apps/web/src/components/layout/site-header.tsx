@@ -4,6 +4,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { siteConfig } from "@/config/site"
 import { MobileNav } from "./mobile-nav"
 import { ThemeToggle } from "./theme-toggle"
+import { UserMenu } from "./user-menu"
 
 /**
  * Sticky top bar: brand + primary nav on the left, search + session actions on the right.
@@ -49,13 +50,8 @@ export function SiteHeader() {
             <SearchIcon />
           </Link>
           <ThemeToggle />
-          <div className="hidden items-center gap-2 lg:flex">
-            <Link href="/login" className={buttonVariants({ variant: "outline" })}>
-              Entrar
-            </Link>
-            <Link href="/signup" className={buttonVariants()}>
-              Crear cuenta
-            </Link>
+          <div className="hidden lg:block">
+            <UserMenu />
           </div>
           <MobileNav />
         </div>

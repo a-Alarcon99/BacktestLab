@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg import Connection
 
+from app.core.auth import require_internal_key
 from app.core.config import get_settings
 from app.core.db import get_conn
 from app.schemas.backtest import BacktestRequest, BacktestResult
@@ -45,11 +46,14 @@ def check_range(from_: date, to: date, timeframe: Timeframe, max_candles: int, t
         )
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[Depends(require_internal_key)])
 def run_backtest(
     req: BacktestRequest, conn: Annotated[Connection, Depends(get_conn)]
 ) -> BacktestResult:
-    """Stateless: runs the given strategy over real candles; nothing is stored."""
+    """Stateless: runs the given strategy over real candles; nothing is stored.
+
+    Callable only by the web app (internal key), which enforces the per-user quotas.
+    """
     settings = get_settings()
     check_range(
         req.from_, req.to, req.timeframe, settings.max_backtest_candles, datetime.now(UTC).date()
