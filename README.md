@@ -46,7 +46,31 @@ pip install -e .
 fastapi dev app/main.py       # http://localhost:8000  ·  docs en /docs
 ```
 
-Endpoints iniciales: `GET /health`, `GET /health/db`.
+Endpoints: `GET /health`, `GET /health/db`, `GET /assets`, `GET /assets/{symbol}`,
+`GET /assets/{symbol}/candles` y `POST /backtests/run` (stateless: recibe la estrategia
+completa y devuelve el resultado).
+
+Tests (unitarios, sin red ni base de datos) y lint:
+
+```bash
+.venv\Scripts\python -m pytest
+.venv\Scripts\ruff check . && .venv\Scripts\ruff format .
+```
+
+> En Windows usa siempre los ejecutables del venv: un `fastapi` global con Python < 3.12 falla
+> con `ImportError: cannot import name 'UTC'`.
+
+## Funcionalidades
+
+- **Activos**: catálogo con cotización en vivo (Binance + CoinGecko), gráfico de precio con todo
+  el histórico y temporalidades 1h/4h/1d/1w/1M (solo se almacenan velas de 1h; el resto se
+  remuestrea con pandas).
+- **Estrategias**: reglas de compra/venta con condiciones (indicadores, cruces, patrones de velas)
+  y comprobación de contradicciones. Incluye estrategias predefinidas de solo lectura.
+- **Backtests**: se ejecutan sobre un rango de fechas y temporalidad con animación de la
+  simulación y estadísticas finales. Las estrategias propias y los últimos 10 backtests se
+  guardan en el `localStorage` del navegador (aún sin login); cada activo muestra su historial
+  y `/backtests` el global.
 
 ## Conexiones a Supabase
 
