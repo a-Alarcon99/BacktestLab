@@ -62,6 +62,8 @@ export async function saveStrategy(draft: StrategyDraft, id?: string): Promise<S
     initialCapital: draft.initialCapital,
     feePct: draft.feePct,
     rules: draft.rules,
+    recommendedTimeframe: draft.recommendedTimeframe,
+    recommendedRange: draft.recommendedRange,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
   }

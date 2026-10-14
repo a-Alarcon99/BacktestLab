@@ -142,6 +142,22 @@ function BacktestConfig({
                 >
                   {isPreset(strategy.id) ? "Ver reglas" : "Editar estrategia"}
                 </Link>
+                {(strategy.recommendedTimeframe || strategy.recommendedRange) && (
+                  <span className="mt-1 block">
+                    Recomendado:{" "}
+                    {strategy.recommendedTimeframe && (
+                      <>
+                        temporalidad <span className="num font-semibold">{strategy.recommendedTimeframe}</span>
+                      </>
+                    )}
+                    {strategy.recommendedTimeframe && strategy.recommendedRange && " · "}
+                    {strategy.recommendedRange && (
+                      <>
+                        periodo <span className="num font-semibold">{strategy.recommendedRange}</span>
+                      </>
+                    )}
+                  </span>
+                )}
               </>
             )
           }

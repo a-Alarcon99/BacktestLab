@@ -22,7 +22,7 @@ const AssetViewContext = createContext<AssetView | null>(null)
 /** Client state of the asset page: selected timeframe, price chart type and replay pop-up. */
 function AssetViewProvider({ children }: { children: React.ReactNode }) {
   const [timeframe, setTimeframe] = useState<Timeframe>(defaultTimeframe)
-  const [chartType, setChartType] = useState<ChartType>("line")
+  const [chartType, setChartType] = useState<ChartType>("candles")
   const [replayOpen, setReplayOpen] = useState(false)
   return (
     <AssetViewContext value={{ timeframe, setTimeframe, chartType, setChartType, replayOpen, setReplayOpen }}>

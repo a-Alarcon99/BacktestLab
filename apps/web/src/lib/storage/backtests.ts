@@ -23,6 +23,10 @@ export function useRecentBacktests() {
   return { data, isLoading: data === undefined }
 }
 
+export async function deleteBacktest(id: string): Promise<void> {
+  store.write(store.read().filter((b) => b.id !== id))
+}
+
 export async function addBacktest(record: BacktestRecord): Promise<void> {
   store.write([record, ...store.read()].slice(0, MAX_BACKTESTS))
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ChevronRightIcon, FlaskConicalIcon, StarIcon } from "lucide-react";
+import { ChevronRightIcon, FlaskConicalIcon } from "lucide-react";
 import { BacktestConfig } from "@/components/backtest/backtest-config";
 import { RunBacktestButton } from "@/components/backtest/run-backtest-button";
 import { AssetHeader } from "@/components/market/asset-header";
@@ -11,7 +11,7 @@ import { ChartSkeleton, LivePriceChart, PriceChartControls } from "@/components/
 import { RangeBar } from "@/components/market/range-bar";
 import { StatList } from "@/components/market/stat-list";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { defaultTimeframe } from "@/lib/candles";
 import { formatCompact, formatDate } from "@/lib/format";
@@ -84,9 +84,6 @@ async function AssetContent({ params }: Pick<PageProps<"/assets/[symbol]">, "par
               <FlaskConicalIcon data-icon="inline-start" />
               Configurar backtest
             </Link>
-            <Button size="icon-lg" variant="outline" aria-label="Añadir a favoritos">
-              <StarIcon />
-            </Button>
           </div>
 
           <Suspense fallback={<AssetStats info={info} />}>

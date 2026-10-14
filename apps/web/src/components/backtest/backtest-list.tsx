@@ -1,13 +1,14 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon, Trash2Icon } from "lucide-react"
 import { AssetAvatar } from "@/components/market/asset-avatar"
 import { PriceChange } from "@/components/market/price-change"
 import { Sparkline } from "@/components/market/sparkline"
 import { Badge } from "@/components/ui/badge"
 import type { BacktestRecord } from "@/lib/backtests"
 import { formatDate } from "@/lib/format"
+import { deleteBacktest } from "@/lib/storage/backtests"
 import { BacktestReplayDialog, type ReplayRun } from "./backtest-replay"
 
 const decimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -15,7 +16,7 @@ const oneDecimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, ma
 
 // Shared by the column header and every row so the columns line up on large screens.
 const rowGrid =
-  "lg:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_auto] lg:items-center lg:gap-4 xl:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_7.5rem_auto]"
+  "lg:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_auto] lg:items-center lg:gap-4 lg:pr-14 xl:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_7.5rem_auto]"
 
 const columns = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de acierto", "Operaciones"]
 
@@ -70,8 +71,19 @@ function BacktestTable({
 
       <ul className="divide-y">
         {backtests.map((backtest) => (
-          <li key={backtest.id}>
+          <li key={backtest.id} className="relative">
             <BacktestRow backtest={backtest} onOpen={() => onOpen(backtest)} />
+            <button
+              type="button"
+              aria-label={`Eliminar backtest de ${backtest.symbol}/USDT con ${backtest.strategy.name}`}
+              title="Eliminar del historial"
+              onClick={() => {
+                if (window.confirm("¿Eliminar este backtest del historial?")) void deleteBacktest(backtest.id)
+              }}
+              className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-down-soft hover:text-down focus-visible:ring-3 focus-visible:ring-ring/30 lg:top-1/2 lg:right-4 lg:-translate-y-1/2"
+            >
+              <Trash2Icon className="size-4" />
+            </button>
           </li>
         ))}
       </ul>
@@ -87,7 +99,7 @@ function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestRecord; onOpen
       aria-haspopup="dialog"
       className={`group grid w-full gap-4 text-left px-4 py-4 outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:ring-inset md:px-5 ${rowGrid}`}
     >
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
         <AssetAvatar symbol={b.symbol} size={32} />
         <div className="flex min-w-0 flex-col gap-1">
           <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">

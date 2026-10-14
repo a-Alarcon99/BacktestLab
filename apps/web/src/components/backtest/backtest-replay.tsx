@@ -40,7 +40,7 @@ const signedAmount = new Intl.NumberFormat("es-ES", {
 })
 
 /** Narrowest slot per candle: long runs show a window of this density that follows the animation. */
-const MIN_CANDLE_SLOT = 10
+const MIN_CANDLE_SLOT = 12
 
 const tradeDateTime = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",

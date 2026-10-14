@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, Input, Select } from "@/components/ui/input"
+import { rangePresets, timeframes, type RangePreset, type Timeframe } from "@/lib/candles"
 import { presetStrategies } from "@/lib/preset-strategies"
 import { saveStrategy, useStrategies } from "@/lib/storage/strategies"
 import {
@@ -54,6 +55,8 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
     initialCapital: strategy?.initialCapital ?? DEFAULT_CAPITAL,
     feePct: strategy?.feePct ?? DEFAULT_FEE_PCT,
     rules: strategy?.rules ?? [],
+    recommendedTimeframe: strategy?.recommendedTimeframe,
+    recommendedRange: strategy?.recommendedRange,
   }))
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -156,6 +159,48 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
                 value={draft.feePct}
                 onValue={(feePct) => setDraft((d) => ({ ...d, feePct }))}
               />
+            </Field>
+            <Field
+              label="Temporalidad recomendada (opcional)"
+              htmlFor="rec-timeframe"
+              hint="Se muestra al elegir la estrategia en un activo."
+            >
+              <Select
+                id="rec-timeframe"
+                name="rec-timeframe"
+                value={draft.recommendedTimeframe ?? ""}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, recommendedTimeframe: (event.target.value || undefined) as Timeframe | undefined }))
+                }
+              >
+                <option value="">Sin recomendación</option>
+                {timeframes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Periodo recomendado (opcional)"
+              htmlFor="rec-range"
+              hint="Rango de fechas con el que mejor funciona."
+            >
+              <Select
+                id="rec-range"
+                name="rec-range"
+                value={draft.recommendedRange ?? ""}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, recommendedRange: (event.target.value || undefined) as RangePreset | undefined }))
+                }
+              >
+                <option value="">Sin recomendación</option>
+                {rangePresets.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </CardContent>
         </Card>

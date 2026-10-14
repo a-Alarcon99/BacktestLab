@@ -1,3 +1,5 @@
+import type { RangePreset, Timeframe } from "@/lib/candles"
+
 // Strategy model shared by the form, the list and the backtest request. Mirrors the API's
 // `app/schemas/backtest.py`; contradiction rules mirror `app/strategies/validation.py`.
 
@@ -45,12 +47,18 @@ export type Strategy = {
   /** Fee per order, in %. */
   feePct: number
   rules: Rule[]
+  /** Optional hints shown when the strategy is picked for a backtest; they never constrain it. */
+  recommendedTimeframe?: Timeframe
+  recommendedRange?: RangePreset
   /** ISO timestamps. */
   createdAt: string
   updatedAt: string
 }
 
-export type StrategyDraft = Pick<Strategy, "name" | "initialCapital" | "feePct" | "rules">
+export type StrategyDraft = Pick<
+  Strategy,
+  "name" | "initialCapital" | "feePct" | "rules" | "recommendedTimeframe" | "recommendedRange"
+>
 
 export const MAX_RULES = 10
 export const MAX_CONDITIONS = 3
