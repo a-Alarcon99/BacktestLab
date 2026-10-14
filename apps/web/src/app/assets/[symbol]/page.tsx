@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ChevronRightIcon, FlaskConicalIcon } from "lucide-react";
+import { AssetBacktests } from "@/components/backtest/asset-backtests";
 import { BacktestConfig } from "@/components/backtest/backtest-config";
 import { RunBacktestButton } from "@/components/backtest/run-backtest-button";
 import { AssetHeader } from "@/components/market/asset-header";
@@ -34,8 +35,6 @@ export async function generateMetadata({ params }: PageProps<"/assets/[symbol]">
   const info = await getAssetInfo((await params).symbol);
   return { title: info ? `${info.name} (${info.symbol})` : "Activo no encontrado" };
 }
-
-const resultMetrics = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de acierto", "Operaciones"];
 
 /** `params` is URL data: it is resolved inside <Suspense> so the shell can be served instantly. */
 export default function AssetPage({ params }: PageProps<"/assets/[symbol]">) {
@@ -115,31 +114,12 @@ async function AssetContent({ params }: Pick<PageProps<"/assets/[symbol]">, "par
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Resultados</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-                {resultMetrics.map((metric) => (
-                  <div key={metric} className="rounded-lg bg-muted/60 px-3 py-2.5">
-                    <dt className="text-caption text-muted-foreground">{metric}</dt>
-                    <dd className="num text-title font-bold text-muted-foreground/60">—</dd>
-                  </div>
-                ))}
-              </dl>
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong px-4 py-10 text-center">
-                <span className="flex size-10 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                  <FlaskConicalIcon className="size-5" />
-                </span>
-                <p className="font-semibold">Todavía no hay resultados</p>
-                <p className="max-w-sm text-caption text-muted-foreground">
-                  Elige el rango de fechas, la temporalidad y la estrategia, y ejecuta el backtest para ver la curva de
-                  capital y las operaciones.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <section aria-labelledby="asset-backtests" className="flex flex-col gap-3">
+            <h2 id="asset-backtests" className="text-title font-bold">
+              Backtests de {info.symbol}
+            </h2>
+            <AssetBacktests symbol={info.symbol} />
+          </section>
         </div>
 
         {/* Mobile: primary action pinned to the bottom edge */}
