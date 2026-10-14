@@ -12,7 +12,8 @@ def to_camel(name: str) -> str:
 class CamelModel(BaseModel):
     """Serialized with camelCase keys to match the web app's TypeScript types."""
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    # allow_inf_nan=False: `Infinity`/`NaN` in a request body would otherwise pass range checks.
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, allow_inf_nan=False)
 
 
 class Asset(CamelModel):

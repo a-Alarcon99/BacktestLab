@@ -19,6 +19,31 @@ class Settings(BaseSettings):
     quote_ttl_seconds: int = 30
     market_cap_ttl_seconds: int = 3600
 
+    # --- Abuse / cost protection (see SECURITY.md) ---
+    # Set to false in production: hides /docs, /redoc and /openapi.json.
+    docs_enabled: bool = True
+    # Number of trusted reverse proxies in front of the API (0 = use the socket address).
+    # Only then is X-Forwarded-For honoured; otherwise clients could spoof their IP.
+    trusted_proxy_hops: int = 0
+    rate_limit_enabled: bool = True
+    # Per client IP.
+    rate_limit_backtest_per_minute: int = 6
+    rate_limit_backtest_per_hour: int = 60
+    rate_limit_candles_per_minute: int = 60
+    rate_limit_default_per_minute: int = 120
+    # Across all clients: bounds distributed abuse (many IPs) on the expensive endpoint.
+    rate_limit_backtest_global_per_minute: int = 60
+    # Outbound calls to Binance/CoinGecko from this process, per minute (hard budget).
+    provider_calls_per_minute: int = 300
+    max_concurrent_backtests: int = 2
+    backtest_queue_timeout_seconds: float = 10
+    max_body_bytes: int = 64 * 1024
+    # Candles a single backtest may simulate (range / timeframe), warm-up excluded.
+    max_backtest_candles: int = 100_000
+    db_pool_max_size: int = 8
+    db_pool_timeout_seconds: float = 10
+    db_statement_timeout_ms: int = 20_000
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

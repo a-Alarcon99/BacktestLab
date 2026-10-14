@@ -118,11 +118,11 @@ Condition = Annotated[
 class OrderSize(CamelModel):
     # Buy: % of the available cash or a fixed USDT amount. Sell: % of the position.
     unit: Literal["pct", "usdt"]
-    value: float = Field(gt=0)
+    value: float = Field(gt=0, le=1_000_000_000)
 
 
 class Rule(CamelModel):
-    id: str
+    id: str = Field(min_length=1, max_length=64)
     side: Literal["buy", "sell"]
     conditions: list[Condition] = Field(min_length=1, max_length=3)
     size: OrderSize
@@ -149,7 +149,7 @@ class StrategyConfig(CamelModel):
 
 
 class BacktestRequest(CamelModel):
-    symbol: str
+    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9]+$")
     timeframe: Timeframe
     # Inclusive range of whole UTC days.
     from_: date = Field(alias="from")

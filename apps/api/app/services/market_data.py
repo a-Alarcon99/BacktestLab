@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
+from app.core.security import limiter
 
 BINANCE_KLINE_LIMIT = 1000
 _MAX_RETRIES = 3
@@ -46,12 +47,32 @@ def _client() -> httpx.Client:
     return httpx.Client(timeout=10)
 
 
+class ProviderBudgetError(httpx.HTTPError):
+    """Outbound call budget of this process is exhausted (protects against provider bans/costs)."""
+
+
+# Longest a request may sleep on a provider's Retry-After: the thread and DB connection are held.
+_MAX_BACKOFF_SECONDS = 5
+
+
+def _retry_after(value: str | None) -> int:
+    try:
+        return max(0, min(int(value or "1"), _MAX_BACKOFF_SECONDS))
+    except ValueError:
+        return 1
+
+
 def _get(url: str, params: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
-    """GET with backoff on rate limiting (429, and Binance's 418 IP ban), honouring Retry-After."""
+    """GET with short backoff on rate limiting (429, and Binance's 418 IP ban).
+
+    Every attempt, retries included, is charged to a per-process budget per minute.
+    """
     for attempt in range(_MAX_RETRIES + 1):
+        if limiter.hit("provider", get_settings().provider_calls_per_minute, 60):
+            raise ProviderBudgetError("Provider call budget exhausted")
         res = _client().get(url, params=params, headers=headers)
         if res.status_code in (418, 429) and attempt < _MAX_RETRIES:
-            time.sleep(min(int(res.headers.get("Retry-After", "1")), 60))
+            time.sleep(_retry_after(res.headers.get("Retry-After")))
             continue
         res.raise_for_status()
         return res.json()

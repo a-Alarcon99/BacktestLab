@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from psycopg import Connection
 from psycopg.rows import dict_row
 
@@ -46,8 +46,11 @@ def list_assets(conn: Annotated[Connection, Depends(get_conn)]) -> list[Asset]:
     return [Asset.model_validate(row) for row in rows if _has_quote(row)]
 
 
+SymbolPath = Annotated[str, Path(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9]+$")]
+
+
 @router.get("/{symbol}")
-def get_asset(symbol: str, conn: Annotated[Connection, Depends(get_conn)]) -> Asset:
+def get_asset(symbol: SymbolPath, conn: Annotated[Connection, Depends(get_conn)]) -> Asset:
     ensure_fresh_quotes(conn)
     rows = (
         conn.cursor(row_factory=dict_row)
@@ -63,7 +66,7 @@ def get_asset(symbol: str, conn: Annotated[Connection, Depends(get_conn)]) -> As
 
 @router.get("/{symbol}/candles")
 def get_asset_candles(
-    symbol: str,
+    symbol: SymbolPath,
     conn: Annotated[Connection, Depends(get_conn)],
     timeframe: Timeframe = "4h",
     before: datetime | None = None,
@@ -80,7 +83,12 @@ def get_asset_candles(
 
     history_start = datetime.combine(asset.history_since, datetime.min.time(), UTC)
     if before is not None:
-        window = older_window(before.astimezone(UTC), timeframe, limit, history_start)
+        # Naive values are read as UTC; out-of-range ones would overflow datetime arithmetic.
+        before = before.replace(tzinfo=UTC) if before.tzinfo is None else before.astimezone(UTC)
+        if before <= history_start:
+            return []
+        before = min(before, datetime.now(UTC))
+        window = older_window(before, timeframe, limit, history_start)
         if window is None:
             return []
         start, end = window
