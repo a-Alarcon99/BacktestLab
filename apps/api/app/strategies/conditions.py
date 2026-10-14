@@ -30,6 +30,7 @@ from app.schemas.backtest import (
     VolumeCondition,
 )
 from app.strategies import indicators as ind
+from app.strategies import patterns
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,20 @@ def _periodic(df: pd.DataFrame, c: PeriodicCondition) -> pd.Series:
     return period.ne(period.shift(1))
 
 
+PATTERN_LABELS = {
+    "hammer": "Martillo",
+    "bullish-engulfing": "Envolvente alcista",
+    "morning-star": "Estrella de la mañana",
+    "piercing-line": "Línea penetrante",
+    "three-white-soldiers": "Tres soldados blancos",
+    "shooting-star": "Estrella fugaz",
+    "bearish-engulfing": "Envolvente bajista",
+    "evening-star": "Estrella de la tarde",
+    "dark-cloud-cover": "Nube oscura",
+    "three-black-crows": "Tres cuervos negros",
+}
+
+
 def entry_change_matches(c: PriceChangeCondition, change_pct: float) -> bool:
     """`change_pct`: change of the close vs. the average entry price, in %."""
     return change_pct > c.pct if c.direction == "up" else change_pct < -c.pct
@@ -189,6 +204,15 @@ SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: Choice("on"),
         warmup=lambda c: 1,
         evaluate=_periodic,
+    ),
+    # One subject per pattern: different patterns can co-occur, the same one in a buy and a sell
+    # rule would fire together.
+    "candle-pattern": ConditionSpec(
+        label=lambda c: PATTERN_LABELS[c.pattern],
+        subject=lambda c: f"candle-pattern:{c.pattern}",
+        constraint=lambda c: Choice("on"),
+        warmup=lambda c: patterns.warmup(c.pattern),
+        evaluate=lambda df, c: patterns.PATTERNS[c.pattern].detect(df),
     ),
 }
 

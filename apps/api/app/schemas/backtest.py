@@ -81,6 +81,26 @@ class PeriodicCondition(CamelModel):
     every: Literal["day", "week", "month"]
 
 
+PatternId = Literal[
+    "hammer",
+    "bullish-engulfing",
+    "morning-star",
+    "piercing-line",
+    "three-white-soldiers",
+    "shooting-star",
+    "bearish-engulfing",
+    "evening-star",
+    "dark-cloud-cover",
+    "three-black-crows",
+]
+
+
+class CandlePatternCondition(CamelModel):
+    kind: Literal["candle-pattern"]
+    # Detectors live in `app/strategies/patterns.py`.
+    pattern: PatternId
+
+
 Condition = Annotated[
     RsiCondition
     | MaCrossCondition
@@ -89,7 +109,8 @@ Condition = Annotated[
     | DonchianCondition
     | PriceChangeCondition
     | VolumeCondition
-    | PeriodicCondition,
+    | PeriodicCondition
+    | CandlePatternCondition,
     Field(discriminator="kind"),
 ]
 

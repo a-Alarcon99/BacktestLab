@@ -6,6 +6,7 @@ import { AssetAvatar } from "@/components/market/asset-avatar"
 import { PriceChange } from "@/components/market/price-change"
 import { Sparkline } from "@/components/market/sparkline"
 import { Badge } from "@/components/ui/badge"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { BacktestRecord } from "@/lib/backtests"
 import { formatDate } from "@/lib/format"
 import { deleteBacktest } from "@/lib/storage/backtests"
@@ -26,6 +27,7 @@ const columns = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de a
  */
 function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
   const [selected, setSelected] = useState<BacktestRecord | null>(null)
+  const [deleting, setDeleting] = useState<BacktestRecord | null>(null)
   const run = useMemo<ReplayRun | null>(
     () =>
       selected && {
@@ -40,7 +42,17 @@ function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
   )
   return (
     <>
-      <BacktestTable backtests={backtests} onOpen={setSelected} />
+      <BacktestTable backtests={backtests} onOpen={setSelected} onDelete={setDeleting} />
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title="Eliminar backtest"
+        description={
+          deleting &&
+          `${deleting.symbol}/USDT · ${deleting.strategy.name}. Se quitará del historial y no se puede deshacer.`
+        }
+        onConfirm={() => deleting && void deleteBacktest(deleting.id)}
+      />
       {run && <BacktestReplayDialog open onOpenChange={(open) => !open && setSelected(null)} run={run} />}
     </>
   )
@@ -49,9 +61,11 @@ function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
 function BacktestTable({
   backtests,
   onOpen,
+  onDelete,
 }: {
   backtests: BacktestRecord[]
   onOpen: (backtest: BacktestRecord) => void
+  onDelete: (backtest: BacktestRecord) => void
 }) {
   return (
     <section aria-label="Últimos backtests" className="overflow-hidden rounded-xl border bg-card text-card-foreground">
@@ -77,9 +91,7 @@ function BacktestTable({
               type="button"
               aria-label={`Eliminar backtest de ${backtest.symbol}/USDT con ${backtest.strategy.name}`}
               title="Eliminar del historial"
-              onClick={() => {
-                if (window.confirm("¿Eliminar este backtest del historial?")) void deleteBacktest(backtest.id)
-              }}
+              onClick={() => onDelete(backtest)}
               className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-down-soft hover:text-down focus-visible:ring-3 focus-visible:ring-ring/30 lg:top-1/2 lg:right-4 lg:-translate-y-1/2"
             >
               <Trash2Icon className="size-4" />

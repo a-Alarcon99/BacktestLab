@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { formatDate } from "@/lib/format"
 import { presetInfo, presetStrategies } from "@/lib/preset-strategies"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { deleteStrategy, useStrategies } from "@/lib/storage/strategies"
 import { describeRule, ruleFamily, type Strategy } from "@/lib/strategy"
 import { ruleKinds } from "./rule-kind"
@@ -124,16 +125,7 @@ function StrategyCard({
             <LockIcon className="size-4" />
             <span className="sr-only">Predefinida: no se puede modificar</span>
           </span>
-        ) : confirming ? (
-          <span className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
-              Cancelar
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => deleteStrategy(strategy.id)}>
-              Eliminar
-            </Button>
-          </span>
-        ) : (
+) : (
           <Button
             variant="ghost"
             size="icon-sm"
@@ -145,6 +137,14 @@ function StrategyCard({
           </Button>
         )}
       </header>
+
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Eliminar estrategia"
+        description={`«${strategy.name}» se eliminará de este navegador. Los backtests ya ejecutados se conservan en el historial.`}
+        onConfirm={() => deleteStrategy(strategy.id)}
+      />
 
       <ul className="flex flex-1 flex-col gap-2.5 px-4 py-4 md:px-5">
         {strategy.rules.map((rule) => {

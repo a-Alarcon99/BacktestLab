@@ -31,6 +31,7 @@ import {
   type StrategyDraft,
   type StrategyErrors,
 } from "@/lib/strategy"
+import { CandlePatternPicker } from "./candle-pattern-picker"
 import { ruleKinds } from "./rule-kind"
 
 const sideCopy = {
@@ -489,6 +490,7 @@ const families: { family: RuleKind; label: string }[] = [
   { family: "indicator", label: "Indicadores" },
   { family: "price", label: "Precio" },
   { family: "volume", label: "Volumen" },
+  { family: "pattern", label: "Patrones de velas" },
   { family: "periodic", label: "Periódica" },
 ]
 
@@ -616,6 +618,9 @@ function ConditionEditor({
           {num("period", "Media de", c.period, { suffix: "velas" })}
         </>
       )
+      break
+    case "candle-pattern":
+      fields = <CandlePatternPicker id={id} value={c.pattern} onChange={(pattern) => set({ pattern })} />
       break
     case "periodic":
       fields = select("every", "Frecuencia", c.every, [

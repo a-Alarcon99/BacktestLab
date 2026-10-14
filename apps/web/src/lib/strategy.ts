@@ -1,11 +1,12 @@
 import type { RangePreset, Timeframe } from "@/lib/candles"
+import { patternById, type PatternId } from "@/lib/candle-patterns"
 
 // Strategy model shared by the form, the list and the backtest request. Mirrors the API's
 // `app/schemas/backtest.py`; contradiction rules mirror `app/strategies/validation.py`.
 
 export type RuleSide = "buy" | "sell"
 /** UI families used to group condition kinds. */
-export type RuleKind = "indicator" | "price" | "volume" | "periodic"
+export type RuleKind = "indicator" | "price" | "volume" | "periodic" | "pattern"
 
 type Op = "above" | "below"
 type Direction = "up" | "down"
@@ -23,6 +24,8 @@ export type Condition =
   /** Volume vs. the average of the previous `period` candles. */
   | { kind: "volume"; op: Op; multiple: number; period: number }
   | { kind: "periodic"; every: "day" | "week" | "month" }
+  /** Candlestick pattern completed by the closing candle (see `lib/candle-patterns.ts`). */
+  | { kind: "candle-pattern"; pattern: PatternId }
 
 export type ConditionKind = Condition["kind"]
 type ConditionOf<K extends ConditionKind> = Extract<Condition, { kind: K }>
@@ -205,6 +208,18 @@ export const conditionSpecs: { [K in ConditionKind]: ConditionSpec<ConditionOf<K
     subject: (c) => ({ key: `periodic:${c.every}`, label: "la misma frecuencia" }),
     constraint: () => choice("on"),
     validate: () => ({}),
+  },
+  "candle-pattern": {
+    name: "Patrón de velas",
+    family: "pattern",
+    defaults: (side) => ({ kind: "candle-pattern", pattern: side === "buy" ? "hammer" : "shooting-star" }),
+    describe: (c) =>
+      `Se forma el patrón ${patternById[c.pattern].name} (${patternById[c.pattern].bias === "bullish" ? "alcista" : "bajista"})`,
+    // One subject per pattern: different patterns may co-occur, the same one in a buy and a sell
+    // rule would fire together.
+    subject: (c) => ({ key: `candle-pattern:${c.pattern}`, label: `el patrón ${patternById[c.pattern].name}` }),
+    constraint: () => choice("on"),
+    validate: (c) => errors({ pattern: !(c.pattern in patternById) && "Elige un patrón" }),
   },
 }
 
