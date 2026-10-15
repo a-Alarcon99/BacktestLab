@@ -1,4 +1,5 @@
 import { rangePresets, timeframes } from "@/lib/candles";
+import { readLimitedText } from "@/lib/server/body";
 import { presetStrategies } from "@/lib/preset-strategies";
 import {
   conditionKinds,
@@ -74,8 +75,8 @@ export function parseStrategyDraft(body: unknown): ParsedDraft {
 
 /** Reads and parses a JSON body with a hard size cap. */
 export async function readJson(request: Request, maxBytes = MAX_BODY_BYTES): Promise<unknown | undefined> {
-  const text = await request.text();
-  if (text.length > maxBytes) return undefined;
+  const text = await readLimitedText(request, maxBytes);
+  if (text === undefined) return undefined;
   try {
     return JSON.parse(text);
   } catch {

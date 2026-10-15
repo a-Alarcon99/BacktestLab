@@ -43,3 +43,38 @@ def test_unconfigured_key_refuses_everyone(bare_client, monkeypatch):
     monkeypatch.setattr(get_settings(), "internal_api_key", None)
     res = bare_client.post("/backtests/run", json=body(), headers={"X-Internal-Key": "x"})
     assert res.status_code == 503
+
+
+def test_short_key_counts_as_unconfigured(bare_client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "internal_api_key", "short")
+    res = bare_client.post("/backtests/run", json=body(), headers={"X-Internal-Key": "short"})
+    assert res.status_code == 503
+
+
+def test_internal_key_does_not_bypass_validation_or_limits(bare_client):
+    # The key authenticates the caller, but the engine still rejects bad payloads and rate-limits.
+    key = get_settings().internal_api_key
+    limit = get_settings().rate_limit_backtest_per_minute
+    codes = [
+        bare_client.post(
+            "/backtests/run", json=body(symbol="!!"), headers={"X-Internal-Key": key}
+        ).status_code
+        for _ in range(limit + 1)
+    ]
+    assert codes[-1] == 429
+
+
+def test_forwarded_address_buckets_are_independent_per_user(bare_client):
+    # The web app forwards each user's address; one user exhausting theirs must not block another.
+    key = get_settings().internal_api_key
+    limit = get_settings().rate_limit_backtest_per_minute
+
+    def call(who: str) -> int:
+        return bare_client.post(
+            "/backtests/run",
+            json=body(symbol="!!"),
+            headers={"X-Internal-Key": key, "X-Forwarded-For": who},
+        ).status_code
+
+    assert [call("203.0.113.1") for _ in range(limit + 1)][-1] == 429
+    assert call("203.0.113.2") == 422
