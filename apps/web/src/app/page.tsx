@@ -1,8 +1,11 @@
 import { Suspense } from "react";
-import { SearchIcon } from "lucide-react";
 import { AssetCard } from "@/components/market/asset-card";
-import { CategoryFilter, CategoryFilterItem, CategoryFilterProvider } from "@/components/market/category-filter";
-import { Input } from "@/components/ui/input";
+import {
+  CategoryFilter,
+  CategoryFilterItem,
+  CategoryFilterProvider,
+  CategoryFilterSearch,
+} from "@/components/market/category-filter";
 import { getAssetCatalog, getAssets } from "@/lib/market";
 
 export default async function Home() {
@@ -27,11 +30,7 @@ export default async function Home() {
               categories={categories}
               className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0"
             />
-            <label className="relative lg:w-64">
-              <span className="sr-only">Buscar activo</span>
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="search" placeholder="Buscar por nombre o símbolo" className="h-8 pl-9" />
-            </label>
+            <CategoryFilterSearch className="lg:w-64" />
           </div>
 
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -49,7 +48,7 @@ export default async function Home() {
 async function AssetGrid() {
   const assets = await getAssets();
   return assets.map((asset) => (
-    <CategoryFilterItem key={asset.symbol} category={asset.category}>
+    <CategoryFilterItem key={asset.symbol} category={asset.category} name={asset.name} symbol={asset.symbol}>
       <AssetCard asset={asset} />
     </CategoryFilterItem>
   ));

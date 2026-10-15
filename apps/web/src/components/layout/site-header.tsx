@@ -1,14 +1,13 @@
 import Link from "next/link"
-import { ActivityIcon, SearchIcon } from "lucide-react"
-import { buttonVariants } from "@/components/ui/button"
+import { ActivityIcon } from "lucide-react"
 import { siteConfig } from "@/config/site"
 import { MobileNav } from "./mobile-nav"
 import { ThemeToggle } from "./theme-toggle"
 import { UserMenu } from "./user-menu"
 
 /**
- * Sticky top bar: brand + primary nav on the left, search + session actions on the right.
- * Below `lg` the nav collapses into a full-screen menu; below `md` search becomes an icon.
+ * Sticky top bar: brand + primary nav on the left, session actions on the right.
+ * Below `lg` the nav collapses into a full-screen menu.
  */
 export function SiteHeader() {
   return (
@@ -34,21 +33,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <label className="hidden h-9 w-56 items-center gap-2 rounded-lg bg-muted px-3 text-muted-foreground focus-within:ring-2 focus-within:ring-ring/40 md:flex xl:w-64">
-            <SearchIcon className="size-4 shrink-0" />
-            <input
-              type="search"
-              placeholder="Buscar activo o estrategia"
-              className="w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-          <Link
-            href="/search"
-            aria-label="Buscar"
-            className={buttonVariants({ variant: "ghost", size: "icon", className: "md:hidden" })}
-          >
-            <SearchIcon />
-          </Link>
           <ThemeToggle />
           <div className="hidden lg:block">
             <UserMenu />
