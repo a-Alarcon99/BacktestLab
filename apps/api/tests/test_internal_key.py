@@ -64,8 +64,9 @@ def test_internal_key_does_not_bypass_validation_or_limits(bare_client):
     assert codes[-1] == 429
 
 
-def test_forwarded_address_buckets_are_independent_per_user(bare_client):
+def test_forwarded_address_buckets_are_independent_per_user(bare_client, monkeypatch):
     # The web app forwards each user's address; one user exhausting theirs must not block another.
+    monkeypatch.setattr(get_settings(), "trusted_proxy_hops", 0)
     key = get_settings().internal_api_key
     limit = get_settings().rate_limit_backtest_per_minute
 

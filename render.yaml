@@ -1,0 +1,27 @@
+# Render Blueprint for the engine (FastAPI). The web app lives on Vercel (root directory apps/web).
+# Secrets are marked `sync: false`: Render asks for them in the dashboard and they never enter git.
+services:
+  - type: web
+    name: backtestlab-api
+    runtime: docker
+    dockerContext: apps/api
+    dockerfilePath: apps/api/Dockerfile
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
+      - key: COINGECKO_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://backtestlab.xyz,https://www.backtestlab.xyz
+      - key: DOCS_ENABLED
+        value: "false"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: BINANCE_BASE_URL
+        value: https://data-api.binance.vision

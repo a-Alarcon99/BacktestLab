@@ -110,9 +110,11 @@ def make_rate_limit_middleware(
                 # Backtests only arrive through the web app, which is the one peer here: it
                 # authenticates with the internal key and forwards the real client address, so
                 # that header is trusted for such calls (otherwise every user shares one bucket).
+                # The web app's entry sits one position further left for each proxy in front of
+                # us, which append the web app's own address after it.
                 hops = s.trusted_proxy_hops
                 if path_is_backtest_run(request) and _has_valid_internal_key(request, s):
-                    hops = max(hops, 1)
+                    hops += 1
                 ip = client_ip(
                     request.client.host if request.client else None,
                     request.headers.get("x-forwarded-for"),

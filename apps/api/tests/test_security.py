@@ -113,8 +113,9 @@ def test_spoofed_forwarded_for_does_not_bypass_limit(client, monkeypatch):
     assert res.status_code == 429
 
 
-def test_web_app_forwarded_ip_is_used_with_internal_key(client):
+def test_web_app_forwarded_ip_is_used_with_internal_key(client, monkeypatch):
     # The web app is the single peer: its forwarded client address keeps users in separate buckets.
+    monkeypatch.setattr(get_settings(), "trusted_proxy_hops", 0)
     limit = get_settings().rate_limit_backtest_per_minute
     for i in range(limit):
         client.post(
@@ -122,6 +123,24 @@ def test_web_app_forwarded_ip_is_used_with_internal_key(client):
         )
     res = client.post(
         "/backtests/run", json=body(symbol="!!"), headers={"X-Forwarded-For": "9.9.9.9"}
+    )
+    assert res.status_code != 429
+
+
+def test_web_app_forwarded_ip_is_found_behind_a_platform_proxy(client, monkeypatch):
+    # One platform proxy (Render, Fly...) appends the web app's address after the client's.
+    monkeypatch.setattr(get_settings(), "trusted_proxy_hops", 1)
+    limit = get_settings().rate_limit_backtest_per_minute
+    for i in range(limit):
+        client.post(
+            "/backtests/run",
+            json=body(symbol="!!"),
+            headers={"X-Forwarded-For": f"1.1.1.{i}, 76.76.21.21"},
+        )
+    res = client.post(
+        "/backtests/run",
+        json=body(symbol="!!"),
+        headers={"X-Forwarded-For": "9.9.9.9, 76.76.21.21"},
     )
     assert res.status_code != 429
 
