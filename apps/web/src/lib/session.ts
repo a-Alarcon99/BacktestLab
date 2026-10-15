@@ -13,6 +13,8 @@ export type Me = {
     maxBacktestsTotal: number | null
     maxBacktestsPerDay: number | null
     historySize: number
+    /** ISO end of paid access; `null` when the plan doesn't expire. */
+    expiresAt: string | null
   }
   usage: { strategiesCreated: number; backtestsTotal: number; backtestsToday: number }
 }

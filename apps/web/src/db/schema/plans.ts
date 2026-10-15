@@ -1,4 +1,16 @@
-import { date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 import { user } from "./auth";
@@ -26,6 +38,15 @@ export const plans = pgTable("plans", {
    * NULL = no IP bucket.
    */
   ipShareMultiplier: integer("ip_share_multiplier"),
+  /** Shown on the public plans page. Internal plans (guest) are not listed. */
+  listed: boolean("listed").default(false).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  tagline: text("tagline"),
+  /** Marketing bullet list (display only; limits above are what is enforced). */
+  features: jsonb("features").$type<string[]>().default([]).notNull(),
+  /** Price in US cents per period; NULL = not purchasable (free / internal plans). */
+  priceMonthlyCents: integer("price_monthly_cents"),
+  priceYearlyCents: integer("price_yearly_cents"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }).enableRLS();
 
@@ -37,6 +58,8 @@ export const userPlans = pgTable("user_plans", {
   planId: text("plan_id")
     .notNull()
     .references(() => plans.id),
+  /** End of paid access; NULL = does not expire (manual/admin assignment). */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }).enableRLS();
 

@@ -1,4 +1,5 @@
 import { and, eq, notExists, sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/db";
@@ -37,7 +38,9 @@ async function adoptGuestStrategies(userKey: string) {
 /** Who the caller is, their plan limits and how much of them is used. */
 export async function GET() {
   const identity = await resolveIdentity();
-  if (identity.kind === "user") await adoptGuestStrategies(identity.key);
+  // This GET writes (adoption), so a cross-site navigation must not trigger it.
+  const crossSite = (await headers()).get("sec-fetch-site") === "cross-site";
+  if (identity.kind === "user" && !crossSite) await adoptGuestStrategies(identity.key);
   const usage = await readUsage(identity);
   const { plan } = identity;
   return Response.json(
@@ -50,6 +53,7 @@ export async function GET() {
         maxBacktestsTotal: plan.maxBacktestsTotal,
         maxBacktestsPerDay: plan.maxBacktestsPerDay,
         historySize: plan.historySize,
+        expiresAt: identity.planExpiresAt?.toISOString() ?? null,
       },
       usage,
     },

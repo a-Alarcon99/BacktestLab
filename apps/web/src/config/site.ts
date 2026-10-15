@@ -5,6 +5,6 @@ export const siteConfig = {
     { label: "Activos", href: "/" },
     { label: "Backtests", href: "/backtests" },
     { label: "Estrategias", href: "/strategies" },
-    { label: "Documentación", href: "/docs" },
+    { label: "Planes", href: "/plans" },
   ],
 } as const

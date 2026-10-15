@@ -39,6 +39,11 @@ function PlanUsage() {
           </div>
         ))}
       </div>
+      {me.user && (
+        <Link href="/plans" className={buttonVariants({ size: "sm", variant: "outline", className: "self-start sm:self-auto" })}>
+          {plan.expiresAt ? `Activo hasta el ${new Date(plan.expiresAt).toLocaleDateString("es-ES")}` : "Mejorar plan"}
+        </Link>
+      )}
       {!me.user && (
         <Link href="/signup" className={buttonVariants({ size: "sm", className: "self-start sm:self-auto" })}>
           Crea una cuenta gratis para ampliar tus límites
@@ -51,7 +56,15 @@ function PlanUsage() {
 /** Shown next to a "limit reached" message: guests are pointed to sign-up. */
 function LimitCta() {
   const me = useMe()
-  if (!me || me.user) return null
+  if (!me) return null
+  if (me.user)
+    return (
+      <div className="flex flex-wrap justify-center gap-2">
+        <Link href="/plans" className={buttonVariants({ size: "sm" })}>
+          Ver planes
+        </Link>
+      </div>
+    )
   return (
     <div className="flex flex-wrap justify-center gap-2">
       <Link href="/signup" className={buttonVariants({ size: "sm" })}>

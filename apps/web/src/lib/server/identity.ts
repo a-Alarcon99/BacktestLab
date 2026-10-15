@@ -6,6 +6,7 @@ import { cookies, headers } from "next/headers";
 import { db } from "@/db";
 import { plans, userPlans } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { normalizeIp } from "./ip";
 
 // Who is calling, and under which plan. Accounts come from the Better Auth session; anonymous
 // visitors get an HMAC-signed, httpOnly guest cookie plus an IP bucket: the cookie alone can be
@@ -26,6 +27,8 @@ export type Identity = {
   ipKey?: string;
   user?: { id: string; name: string; email: string };
   plan: Plan;
+  /** End of paid access of `plan`; null for the default plan and for non-expiring assignments. */
+  planExpiresAt?: Date | null;
 };
 
 function secret() {
@@ -52,10 +55,16 @@ export function clientIp(h: Headers): string {
   const forwarded = h.get("x-forwarded-for");
   if (hops > 0 && forwarded) {
     const parts = forwarded.split(",").map((p) => p.trim()).filter(Boolean);
-    if (parts.length >= hops) return parts[parts.length - hops].slice(0, 64);
+    if (parts.length >= hops) return normalizeIp(parts[parts.length - hops]);
+  }
+  if (hops === 0 && process.env.NODE_ENV === "production" && !warnedNoProxy) {
+    warnedNoProxy = true;
+    console.warn("TRUSTED_PROXY_HOPS is not set: client addresses are unknown, so per-IP limits cannot tell clients apart");
   }
   return "unknown";
 }
+
+let warnedNoProxy = false;
 
 /** Same-origin guard for state-changing requests (cookies are SameSite=Lax; defence in depth). */
 export function isSameOrigin(request: Request): boolean {
@@ -90,15 +99,19 @@ export async function resolveIdentity(options: { createGuest?: boolean } = {}): 
   const session = await auth.api.getSession({ headers: h });
   if (session) {
     const [row] = await db
-      .select({ planId: userPlans.planId })
+      .select({ planId: userPlans.planId, expiresAt: userPlans.expiresAt })
       .from(userPlans)
       .where(eq(userPlans.userId, session.user.id))
       .limit(1);
+    // A paid plan only counts while it hasn't expired: expiry is evaluated on every request, so
+    // access ends on time without any scheduled job.
+    const active = row && (row.expiresAt === null || row.expiresAt > new Date());
     return {
       kind: "user",
       key: `u:${session.user.id}`,
       user: { id: session.user.id, name: session.user.name, email: session.user.email },
-      plan: await loadPlan(row?.planId ?? DEFAULT_USER_PLAN),
+      plan: await loadPlan(active ? row.planId : DEFAULT_USER_PLAN),
+      planExpiresAt: active ? row.expiresAt : null,
     };
   }
 

@@ -29,6 +29,34 @@
       "when": 1792000365065,
       "tag": "0003_seed_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792014080310,
+      "tag": "0004_previous_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792014084204,
+      "tag": "0005_seed_paid_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792059377874,
+      "tag": "0006_tricky_pet_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792063918857,
+      "tag": "0007_dazzling_catseye",
+      "breakpoints": true
     }
   ]
 }
