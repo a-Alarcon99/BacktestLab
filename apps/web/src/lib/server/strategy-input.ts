@@ -1,5 +1,5 @@
 import { rangePresets, timeframes } from "@/lib/candles";
-import { readLimitedText } from "@/lib/server/body";
+import { exceedsDepth, readLimitedText } from "@/lib/server/body";
 import { presetStrategies } from "@/lib/preset-strategies";
 import {
   conditionKinds,
@@ -15,6 +15,8 @@ import {
 // runs where it can't be bypassed. The backtest API validates the full model again at run time.
 
 export const MAX_BODY_BYTES = 64 * 1024;
+/** A backtest request nests ~6 levels (request > strategy > rules > rule > conditions > condition). */
+export const MAX_BODY_DEPTH = 32;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -73,13 +75,15 @@ export function parseStrategyDraft(body: unknown): ParsedDraft {
   return { ok: true, draft };
 }
 
-/** Reads and parses a JSON body with a hard size cap. */
+/** Reads and parses a JSON body with a hard size cap and a nesting cap. */
 export async function readJson(request: Request, maxBytes = MAX_BODY_BYTES): Promise<unknown | undefined> {
   const text = await readLimitedText(request, maxBytes);
   if (text === undefined) return undefined;
+  let value: unknown;
   try {
-    return JSON.parse(text);
+    value = JSON.parse(text);
   } catch {
     return undefined;
   }
+  return exceedsDepth(value, MAX_BODY_DEPTH) ? undefined : value;
 }

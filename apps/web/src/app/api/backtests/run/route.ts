@@ -1,7 +1,5 @@
-import { headers } from "next/headers";
-
 import { apiError, limitResponse } from "@/lib/server/http";
-import { checkAll } from "@/lib/server/rate-limit";
+import { enforce, perClient, tooManyRequests } from "@/lib/server/rate-limit";
 import { clientIp, isSameOrigin, resolveIdentity } from "@/lib/server/identity";
 import { consumeBacktest, LimitError, refundBacktest, requestHash } from "@/lib/server/quota";
 import { readJson } from "@/lib/server/strategy-input";
@@ -12,6 +10,10 @@ const API_URL = (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http
   .replace(/^(https?:\/\/)localhost(?=[:/]|$)/i, "$1127.0.0.1")
   .replace(/\/+$/, "");
 const UPSTREAM_TIMEOUT_MS = 120_000;
+
+// Hard ceiling for this function: the engine wait plus a margin for the quota queries. A first run
+// over a long range may download history from Binance (and the free API instance may be waking up).
+export const maxDuration = 130;
 
 /** The engine did not (or could not) execute the request, so its quota is returned. */
 const shouldRefund = (status: number) => (status >= 400 && status < 500) || status === 503;
@@ -25,26 +27,22 @@ export async function POST(request: Request) {
   const internalKey = process.env.INTERNAL_API_KEY;
   if (!internalKey) return apiError(503, "not_configured", "El servidor de backtesting no está configurado.");
 
+  // Throttle before touching the DB or the engine. Free re-runs of an already paid request and
+  // requests the engine will reject are not covered by the quota, so they need their own cap.
+  // Address and global caps go first: resolving the caller already queries the database.
+  const ip = clientIp(request.headers);
+  const preWait = await enforce([...perClient("run:ip", ip, 30, 60), ["run:global", 240, 60]]);
+  if (preWait > 0) return tooManyRequests(preWait);
+
   const body = await readJson(request);
   if (typeof body !== "object" || body === null) return apiError(400, "bad_request", "Petición no válida.");
 
   const identity = await resolveIdentity({ createGuest: true });
-  const ip = clientIp(await headers());
-
-  // Throttle before touching the DB or the engine. Free re-runs of an already paid request and
-  // requests the engine will reject are not covered by the quota, so they need their own cap.
-  // The IP bucket is skipped when the address is unknown (everyone would share it).
-  const wait = checkAll([
+  const wait = await enforce([
     [`run:subject:${identity.key}:m`, 10, 60],
     [`run:subject:${identity.key}:h`, 120, 3600],
-    ...(ip !== "unknown" ? ([[`run:ip:${ip}`, 30, 60]] as [string, number, number][]) : []),
-    ["run:global", 240, 60],
   ]);
-  if (wait > 0)
-    return new Response(JSON.stringify({ code: "rate_limited", message: "Demasiadas peticiones. Espera unos segundos." }), {
-      status: 429,
-      headers: { "Content-Type": "application/json", "Retry-After": String(Math.ceil(wait)) },
-    });
+  if (wait > 0) return tooManyRequests(wait);
 
   const hash = requestHash(body);
 

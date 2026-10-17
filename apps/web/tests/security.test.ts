@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { readLimitedText } from "../src/lib/server/body.ts";
+import { exceedsDepth, readLimitedText } from "../src/lib/server/body.ts";
 import { normalizeIp } from "../src/lib/server/ip.ts";
-import { checkAll, SlidingWindowLimiter } from "../src/lib/server/rate-limit.ts";
+import { checkAll, perClient, sharedWait, SlidingWindowLimiter } from "../src/lib/server/rate-limit.ts";
 
 test("limiter blocks over the limit and recovers after the window", () => {
   const l = new SlidingWindowLimiter();
@@ -57,4 +57,45 @@ test("body reader rejects an oversized or invalid Content-Length without reading
   assert.equal(await readLimitedText(huge, 1000), undefined);
   const bad = new Request("http://x.test/", { method: "POST", headers: { "content-length": "abc" } });
   assert.equal(await readLimitedText(bad, 1000), undefined);
+});
+
+test("perClient skips unknown addresses", () => {
+  assert.deepEqual(perClient("me:ip", "unknown", 5, 60), []);
+  assert.deepEqual(perClient("me:ip", "203.0.113.9", 5, 60), [["me:ip:203.0.113.9", 5, 60]]);
+});
+
+test("JSON depth cap rejects hostile nesting without overflowing the stack", () => {
+  assert.equal(exceedsDepth({ a: [{ b: 1 }] }, 3), false);
+  assert.equal(exceedsDepth({ a: [{ b: {} }] }, 3), true);
+  const deep = JSON.parse("[".repeat(30_000) + "]".repeat(30_000));
+  assert.equal(exceedsDepth(deep, 32), true);
+});
+
+const store = { url: "https://redis.test", token: "t" };
+
+test("shared limiter sends one EVAL with namespaced keys and returns its wait", async () => {
+  let sent: unknown[] = [];
+  const fake = (async (_url: string, init: RequestInit) => {
+    sent = JSON.parse(String(init.body));
+    assert.equal(new Headers(init.headers).get("authorization"), "Bearer t");
+    return Response.json({ result: 42 });
+  }) as typeof fetch;
+  assert.equal(await sharedWait([["a", 5, 60], ["b", 1, 0.5]], store, fake), 42);
+  assert.equal(sent[0], "EVAL");
+  assert.deepEqual(sent.slice(2), ["2", "bl:rl:a", "bl:rl:b", "5", "60", "1", "1"]);
+});
+
+test("shared limiter fails open when unconfigured or unreachable", async () => {
+  assert.equal(await sharedWait([["a", 1, 60]], null), 0);
+  const down = (async () => {
+    throw new Error("unreachable");
+  }) as typeof fetch;
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(await sharedWait([["a", 1, 60]], store, down), 0);
+    assert.equal(await sharedWait([["a", 1, 60]], store, (async () => new Response("", { status: 500 })) as typeof fetch), 0);
+  } finally {
+    console.error = original;
+  }
 });

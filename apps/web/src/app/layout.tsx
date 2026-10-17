@@ -16,6 +16,10 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Ceiling for rendering any page on demand: live market data comes from the API, whose free
+// instance may need up to a minute to wake up (`apiFetch` gives up after 55 s).
+export const maxDuration = 60;
+
 export const metadata: Metadata = {
   title: { default: siteConfig.name, template: `%s · ${siteConfig.name}` },
   description: siteConfig.description,

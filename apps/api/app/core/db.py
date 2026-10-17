@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from psycopg import Connection
 from psycopg_pool import ConnectionPool
@@ -21,7 +22,9 @@ pool = ConnectionPool(
 )
 
 
-def get_conn() -> Iterator[Connection]:
+@contextmanager
+def connection() -> Iterator[Connection]:
+    """A pooled connection with the per-transaction timeouts; also for work outside a request."""
     with pool.connection() as conn:
         # Transaction-local (the pooler shares sessions, so a session-level SET would leak):
         # caps runaway queries and lock waits for the statements of this transaction.
@@ -29,4 +32,9 @@ def get_conn() -> Iterator[Connection]:
             "select set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)",
             (str(_settings.db_statement_timeout_ms), str(_settings.db_statement_timeout_ms)),
         )
+        yield conn
+
+
+def get_conn() -> Iterator[Connection]:
+    with connection() as conn:
         yield conn

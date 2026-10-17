@@ -55,15 +55,17 @@ class ProviderBudgetError(httpx.HTTPError):
 _MAX_BACKOFF_SECONDS = 5
 
 
-def _retry_after(value: str | None) -> int:
+def _retry_after(value: str | None, attempt: int = 0) -> int:
+    """Provider's Retry-After, else exponential (1, 2, 4 s); always capped."""
+    default = 2**attempt
     try:
-        return max(0, min(int(value or "1"), _MAX_BACKOFF_SECONDS))
+        return max(0, min(int(value) if value else default, _MAX_BACKOFF_SECONDS))
     except ValueError:
-        return 1
+        return min(default, _MAX_BACKOFF_SECONDS)
 
 
 def _get(url: str, params: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
-    """GET with short backoff on rate limiting (429, and Binance's 418 IP ban).
+    """GET with short, bounded backoff on rate limiting (429, and Binance's 418 IP ban).
 
     Every attempt, retries included, is charged to a per-process budget per minute.
     """
@@ -72,7 +74,7 @@ def _get(url: str, params: dict[str, Any], headers: dict[str, str] | None = None
             raise ProviderBudgetError("Provider call budget exhausted")
         res = _client().get(url, params=params, headers=headers)
         if res.status_code in (418, 429) and attempt < _MAX_RETRIES:
-            time.sleep(_retry_after(res.headers.get("Retry-After")))
+            time.sleep(_retry_after(res.headers.get("Retry-After"), attempt))
             continue
         res.raise_for_status()
         return res.json()
@@ -146,11 +148,26 @@ def fetch_klines_1h(symbol: str, start: datetime, end: datetime) -> list[Kline]:
 
 
 def iter_klines_1h(symbol: str, start: datetime, end: datetime) -> Iterator[list[Kline]]:
-    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one."""
+    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one.
+
+    Bounded: never more requests than the range can need (plus one), and a page that doesn't move
+    the cursor forward is an error, so a misbehaving provider can't keep it asking for the same
+    page. Both cases raise instead of stopping early: a partial download could leave a hole in the
+    stored range, which must stay contiguous.
+    """
+    hours = int((end - start) / timedelta(hours=1)) + 1
+    max_requests = -(-hours // BINANCE_KLINE_LIMIT) + 1
     cursor = start
-    while cursor <= end:
+    for _ in range(max_requests):
+        if cursor > end:
+            return
         page = fetch_klines_1h(symbol, cursor, end)
         if not page:
             return
+        next_cursor = page[-1].open_time + timedelta(hours=1)
+        if next_cursor <= cursor:
+            raise httpx.HTTPError(f"Binance returned no newer candles for {symbol} after {cursor}")
         yield page
-        cursor = page[-1].open_time + timedelta(hours=1)
+        cursor = next_cursor
+    if cursor <= end:
+        raise httpx.HTTPError(f"Binance paging for {symbol} exceeded {max_requests} requests")
