@@ -57,6 +57,13 @@
       "when": 1792063918857,
       "tag": "0007_dazzling_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792203386498,
+      "tag": "0008_revoke_data_api_grants",
+      "breakpoints": true
     }
   ]
 }

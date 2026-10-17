@@ -19,6 +19,8 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    # Served behind HTTPS in production; browsers ignore it over plain HTTP (local dev).
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 }
 
 

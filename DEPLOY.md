@@ -161,6 +161,10 @@ necesita `DATABASE_URL` (para leer el catálogo). Si falla:
 
 ## Paso 6 — Protección de costes (hazlo esta semana)
 
+- Aplica la migración que retira los permisos del Data API de Supabase:
+  `cd apps\web; npm run db:migrate` (ver `SECURITY.md`).
+- Límites compartidos entre instancias (opcional, recomendado): crea un Redis en Upstash y añade en
+  Vercel `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN` (sin `NEXT_PUBLIC_`) y redeploy.
 - Vercel → *Firewall*: rate limit para `/api/auth/*` y `/api/backtests/run`.
 - Activa límites de gasto (*Spend Management*) en Vercel y Supabase; límite mensual en Resend.
 - Pendiente (ver `SECURITY.md`): CAPTCHA en el registro.

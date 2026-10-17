@@ -11,36 +11,49 @@ const escapeHtml = (value: string) =>
 
 const HOUR = 60 * 60 * 1000;
 const PER_RECIPIENT_PER_HOUR = 3;
+/** A legitimate sign-up needs one or two; this bounds how often one inbox can be targeted. */
+const PER_RECIPIENT_PER_DAY = 6;
 /** Hard ceiling of emails per rolling 24 h across all recipients (override with MAIL_DAILY_LIMIT). */
 const dailyLimit = () => Number(process.env.MAIL_DAILY_LIMIT ?? 300);
+/** Arbitrary key of the transaction lock that serializes reservations (pg_advisory_xact_lock). */
+const RESERVATION_LOCK_ID = 7_301_002;
 
 /**
  * Reserves one send. Fails closed: on any doubt (cap reached, DB error) nothing is sent, because
  * an unsent verification mail costs a retry while an unbounded sender costs real money and lets
- * anyone use us to flood a victim's inbox.
+ * anyone use us to flood a victim's inbox. Reservations are serialized by a transaction lock, so
+ * concurrent requests can't all pass the checks before any of them is counted.
  */
 export async function reserveEmailSend(to: string): Promise<boolean> {
   const recipient = to.trim().toLowerCase();
   try {
     const now = Date.now();
-    const [{ n: recent }] = await db
-      .select({ n: count() })
-      .from(emailSends)
-      .where(and(eq(emailSends.recipient, recipient), gte(emailSends.sentAt, new Date(now - HOUR))));
-    if (recent >= PER_RECIPIENT_PER_HOUR) return false;
+    const reserved = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${RESERVATION_LOCK_ID})`);
+      const [{ hour, day }] = await tx
+        .select({
+          hour: sql<number>`count(*) filter (where ${emailSends.sentAt} >= ${new Date(now - HOUR).toISOString()}::timestamptz)`.mapWith(Number),
+          day: count(),
+        })
+        .from(emailSends)
+        .where(and(eq(emailSends.recipient, recipient), gte(emailSends.sentAt, new Date(now - 24 * HOUR))));
+      if (hour >= PER_RECIPIENT_PER_HOUR || day >= PER_RECIPIENT_PER_DAY) return false;
 
-    const [{ n: today }] = await db
-      .select({ n: count() })
-      .from(emailSends)
-      .where(gte(emailSends.sentAt, new Date(now - 24 * HOUR)));
-    if (today >= dailyLimit()) {
-      console.error(`Daily email cap (${dailyLimit()}) reached: verification emails are paused`);
-      return false;
-    }
+      const [{ n: today }] = await tx
+        .select({ n: count() })
+        .from(emailSends)
+        .where(gte(emailSends.sentAt, new Date(now - 24 * HOUR)));
+      if (today >= dailyLimit()) {
+        console.error(`Daily email cap (${dailyLimit()}) reached: verification emails are paused`);
+        return false;
+      }
 
-    await db.insert(emailSends).values({ recipient });
-    if (Math.random() < 0.02) await db.delete(emailSends).where(lt(emailSends.sentAt, sql`now() - interval '7 days'`));
-    return true;
+      await tx.insert(emailSends).values({ recipient });
+      return true;
+    });
+    if (reserved && Math.random() < 0.02)
+      await db.delete(emailSends).where(lt(emailSends.sentAt, sql`now() - interval '7 days'`));
+    return reserved;
   } catch (error) {
     console.error("Email throttle unavailable (did you run `npm run db:migrate`?); not sending", error);
     return false;
