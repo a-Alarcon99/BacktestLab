@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # Quotes are refreshed lazily on read once older than these TTLs.
     quote_ttl_seconds: int = 30
     market_cap_ttl_seconds: int = 3600
+    # Stale-while-revalidate: a price snapshot at most this old is served as is while it is refreshed
+    # in the background; older (or missing) ones are refreshed before answering.
+    quote_max_stale_seconds: int = 900
+    # `/health` warms quotes and stored candles in the background, at most this often.
+    warmup_min_interval_seconds: int = 300
 
     # Shared secret the web app sends in `X-Internal-Key` when it proxies a backtest. The web app
     # enforces the user quotas, so `/backtests/run` refuses any caller without it (and, unset,
