@@ -2,17 +2,13 @@
 
 import logging
 import threading
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from typing import NamedTuple
 from concurrent.futures import ThreadPoolExecutor
 from typing import NamedTuple
 
 import httpx
 from psycopg import Connection
 
-from app.core import db
 from app.core import db
 from app.core.config import get_settings
 from app.services import market_data
@@ -38,21 +34,7 @@ class _Staleness(NamedTuple):
 
 
 def _staleness(conn: Connection) -> _Staleness:
-# One background refresh at a time; requests that find one running just serve the stored data.
-_background = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quotes-refresh")
-_background_busy = threading.Lock()
-
-
-class _Staleness(NamedTuple):
-    prices: bool  # older than the TTL (and not in failure backoff)
-    caps: bool
-    # Nothing usable to answer with: missing, or too old to serve while revalidating.
-    blocking: bool
-
-
-def _staleness(conn: Connection) -> _Staleness:
     settings = get_settings()
-    prices_stale, caps_stale, unusable = conn.execute(
     prices_stale, caps_stale, unusable = conn.execute(
         """
         select
@@ -66,10 +48,6 @@ def _staleness(conn: Connection) -> _Staleness:
           coalesce(bool_or(q.price_updated_at is null
             or q.price_updated_at < now() - make_interval(secs => %s)
             or q.market_cap_updated_at is null), false)
-            filter (where q.asset_id is not null), false),
-          coalesce(bool_or(q.price_updated_at is null
-            or q.price_updated_at < now() - make_interval(secs => %s)
-            or q.market_cap_updated_at is null), false)
         from assets a
         left join asset_quotes q on q.asset_id = a.id
         where a.is_active
@@ -79,18 +57,8 @@ def _staleness(conn: Connection) -> _Staleness:
             settings.market_cap_ttl_seconds,
             settings.quote_max_stale_seconds,
         ),
-        (
-            settings.quote_ttl_seconds,
-            settings.market_cap_ttl_seconds,
-            settings.quote_max_stale_seconds,
-        ),
     ).fetchone()
     now = time.monotonic()
-    return _Staleness(
-        prices_stale and now >= _retry_at["prices"],
-        caps_stale and now >= _retry_at["caps"],
-        unusable,
-    )
     return _Staleness(
         prices_stale and now >= _retry_at["prices"],
         caps_stale and now >= _retry_at["caps"],
@@ -141,7 +109,6 @@ def refresh_quotes(conn: Connection) -> None:
     if not locked:
         return  # another worker is refreshing; serve what is stored
     # Re-check under the lock: another worker may have just committed a refresh.
-    prices_stale, caps_stale, _ = _staleness(conn)
     prices_stale, caps_stale, _ = _staleness(conn)
     assets = conn.execute(
         "select id, binance_symbol, coingecko_id from assets where is_active order by id"

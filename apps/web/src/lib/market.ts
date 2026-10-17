@@ -49,10 +49,18 @@ export async function getAsset(symbol: string): Promise<Asset | null> {
   }
 }
 
-export async function getPriceSeries(symbol: string, timeframe: Timeframe): Promise<Candle[]> {
+/**
+ * `null` if the API fails: the chart then fetches the series from the browser, so neither a page
+ * nor the build (which runs this while prerendering) depends on the API answering.
+ */
+export async function getPriceSeries(symbol: string, timeframe: Timeframe): Promise<Candle[] | null> {
   "use cache"
   cacheLife(live)
-  return fetchCandles(symbol, timeframe)
+  try {
+    return await fetchCandles(symbol, timeframe)
+  } catch {
+    return null
+  }
 }
 
 /**

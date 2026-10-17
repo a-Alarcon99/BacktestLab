@@ -84,9 +84,7 @@ def _retry_after(value: str | None, attempt: int = 0) -> int:
     default = 2**attempt
     try:
         return max(0, min(int(value) if value else default, _MAX_BACKOFF_SECONDS))
-        return max(0, min(int(value) if value else default, _MAX_BACKOFF_SECONDS))
     except ValueError:
-        return min(default, _MAX_BACKOFF_SECONDS)
         return min(default, _MAX_BACKOFF_SECONDS)
 
 
@@ -196,19 +194,7 @@ def iter_klines_1h(symbol: str, start: datetime, end: datetime) -> Iterator[list
     """
     hours = int((end - start) / timedelta(hours=1)) + 1
     max_requests = -(-hours // BINANCE_KLINE_LIMIT) + 1
-    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one.
-
-    Bounded: never more requests than the range can need (plus one), and a page that doesn't move
-    the cursor forward is an error, so a misbehaving provider can't keep it asking for the same
-    page. Both cases raise instead of stopping early: a partial download could leave a hole in the
-    stored range, which must stay contiguous.
-    """
-    hours = int((end - start) / timedelta(hours=1)) + 1
-    max_requests = -(-hours // BINANCE_KLINE_LIMIT) + 1
     cursor = start
-    for _ in range(max_requests):
-        if cursor > end:
-            return
     for _ in range(max_requests):
         if cursor > end:
             return
@@ -218,13 +204,7 @@ def iter_klines_1h(symbol: str, start: datetime, end: datetime) -> Iterator[list
         next_cursor = page[-1].open_time + timedelta(hours=1)
         if next_cursor <= cursor:
             raise httpx.HTTPError(f"Binance returned no newer candles for {symbol} after {cursor}")
-        next_cursor = page[-1].open_time + timedelta(hours=1)
-        if next_cursor <= cursor:
-            raise httpx.HTTPError(f"Binance returned no newer candles for {symbol} after {cursor}")
         yield page
-        cursor = next_cursor
-    if cursor <= end:
-        raise httpx.HTTPError(f"Binance paging for {symbol} exceeded {max_requests} requests")
         cursor = next_cursor
     if cursor <= end:
         raise httpx.HTTPError(f"Binance paging for {symbol} exceeded {max_requests} requests")

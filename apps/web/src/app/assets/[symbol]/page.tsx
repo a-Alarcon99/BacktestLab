@@ -173,8 +173,11 @@ function AssetStats({ info, asset }: { info: AssetInfo; asset?: Asset }) {
   );
 }
 
-/** Server-renders the default timeframe; the client chart fetches the others on demand. */
+/**
+ * Server-renders the default timeframe; the client chart fetches the others on demand (and this one
+ * too if the server could not load it).
+ */
 async function AssetPriceChart({ symbol }: { symbol: string }) {
-  const candles = await getPriceSeries(symbol, defaultTimeframe);
+  const candles = (await getPriceSeries(symbol, defaultTimeframe)) ?? undefined;
   return <LivePriceChart symbol={symbol} initialTimeframe={defaultTimeframe} initialCandles={candles} />;
 }

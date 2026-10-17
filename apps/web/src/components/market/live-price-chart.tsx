@@ -51,7 +51,8 @@ function PriceChartControls() {
 
 /**
  * Price chart for the selected timeframe. The initial series is rendered on the server; other
- * timeframes are fetched from the API on first use and kept for the rest of the visit.
+ * timeframes are fetched from the API on first use and kept for the rest of the visit. Without
+ * `initialCandles` (the server could not load them) the initial timeframe is fetched the same way.
  */
 function LivePriceChart({
   symbol,
@@ -60,12 +61,12 @@ function LivePriceChart({
 }: {
   symbol: string
   initialTimeframe: Timeframe
-  initialCandles: Candle[]
+  initialCandles?: Candle[]
 }) {
   const { timeframe, chartType } = useAssetView()
-  const [series, setSeries] = useState<Partial<Record<Timeframe, Candle[] | "error">>>({
-    [initialTimeframe]: initialCandles,
-  })
+  const [series, setSeries] = useState<Partial<Record<Timeframe, Candle[] | "error">>>(
+    initialCandles ? { [initialTimeframe]: initialCandles } : {}
+  )
   // Timeframes whose first candle has been loaded; `loadingOlder` avoids overlapping page requests.
   const [atStart, setAtStart] = useState<Partial<Record<Timeframe, true>>>({})
   const loadingOlder = useRef(false)
