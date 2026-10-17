@@ -101,6 +101,38 @@ def test_iter_klines_pages_through_the_1000_limit(mock_http):
     assert len(requests) == 3
 
 
+def test_backoff_is_exponential_without_retry_after_and_capped():
+    assert [market_data._retry_after(None, a) for a in range(4)] == [1, 2, 4, 5]
+    assert market_data._retry_after("3", 0) == 3
+    assert market_data._retry_after("3600", 0) == market_data._MAX_BACKOFF_SECONDS
+    assert market_data._retry_after("soon", 1) == 2
+
+
+def test_iter_klines_fails_when_a_page_does_not_advance(mock_http):
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    stale = [[int(start.timestamp() * 1000) - HOUR_MS, "1", "2", "0.5", "1.5", "10", 0]]
+    requests = mock_http(lambda _: httpx.Response(200, json=stale))
+
+    with pytest.raises(httpx.HTTPError):
+        list(market_data.iter_klines_1h("BTCUSDT", start, start + timedelta(hours=5)))
+    assert len(requests) == 1
+
+
+def test_iter_klines_request_count_is_bounded_by_the_range(mock_http):
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = start + timedelta(hours=2_499)
+
+    def one_candle_per_page(request: httpx.Request) -> httpx.Response:
+        t = int(request.url.params["startTime"])
+        return httpx.Response(200, json=[[t, "1", "2", "0.5", "1.5", "10", t + HOUR_MS - 1]])
+
+    requests = mock_http(one_candle_per_page)
+
+    with pytest.raises(httpx.HTTPError):
+        list(market_data.iter_klines_1h("BTCUSDT", start, end))
+    assert len(requests) == 4  # 2,500 candles need 3 pages of 1000, plus one of slack
+
+
 def test_iter_klines_stops_when_binance_has_no_data(mock_http):
     listed = datetime(2026, 1, 1, 4, tzinfo=UTC)
     start = datetime(2026, 1, 1, tzinfo=UTC)

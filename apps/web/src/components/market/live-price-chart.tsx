@@ -23,6 +23,8 @@ const chartTypeLabels = {
   ),
 }
 
+const OLDER_RETRY_COOLDOWN_MS = 3_000
+
 /** Timeframe and line/candles toggle for the price chart card header. */
 function PriceChartControls() {
   const { timeframe, setTimeframe, chartType, setChartType } = useAssetView()
@@ -67,11 +69,15 @@ function LivePriceChart({
   // Timeframes whose first candle has been loaded; `loadingOlder` avoids overlapping page requests.
   const [atStart, setAtStart] = useState<Partial<Record<Timeframe, true>>>({})
   const loadingOlder = useRef(false)
+  // After a failed page, wait before retrying: the chart asks on every pan event near the edge,
+  // which would otherwise turn an API error (or a 429) into a burst of requests.
+  const retryOlderAt = useRef(0)
   const candles = series[timeframe]
 
   const loadOlder = useCallback(() => {
     const current = series[timeframe]
     if (!Array.isArray(current) || current.length === 0 || atStart[timeframe] || loadingOlder.current) return
+    if (Date.now() < retryOlderAt.current) return
     const requested = timeframe
     loadingOlder.current = true
     fetchCandles(symbol, requested, current[0].time)
@@ -85,7 +91,10 @@ function LivePriceChart({
           return Array.isArray(loaded) ? { ...s, [requested]: [...older, ...loaded] } : s
         })
       })
-      .catch(() => {}) // transient: the next drag to the left edge retries
+      .catch(() => {
+        // Transient: the next drag to the left edge after the cooldown retries.
+        retryOlderAt.current = Date.now() + OLDER_RETRY_COOLDOWN_MS
+      })
       .finally(() => {
         loadingOlder.current = false
       })

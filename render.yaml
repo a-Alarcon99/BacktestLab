@@ -6,7 +6,7 @@ services:
     runtime: docker
     dockerContext: apps/api
     dockerfilePath: apps/api/Dockerfile
-    plan: starter
+    plan: free # sleeps after ~15 min idle: see DEPLOY.md, Paso 7
     region: frankfurt
     healthCheckPath: /health
     autoDeploy: true

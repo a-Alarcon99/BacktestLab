@@ -1,11 +1,13 @@
 import { and, eq, notExists, sql } from "drizzle-orm";
-import { headers } from "next/headers";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/db";
 import { strategies } from "@/db/schema";
-import { readGuestId, resolveIdentity } from "@/lib/server/identity";
+import { clientIp, readGuestId, resolveIdentity } from "@/lib/server/identity";
 import { readUsage } from "@/lib/server/quota";
+import { enforce, perClient, tooManyRequests } from "@/lib/server/rate-limit";
+
+export const maxDuration = 10;
 
 /** Moves the strategies a visitor created as a guest to the account they just signed in to. */
 async function adoptGuestStrategies(userKey: string) {
@@ -36,10 +38,13 @@ async function adoptGuestStrategies(userKey: string) {
 }
 
 /** Who the caller is, their plan limits and how much of them is used. */
-export async function GET() {
+export async function GET(request: Request) {
+  // Called on every page load: several DB queries each, so it is capped like any other route.
+  const wait = await enforce([...perClient("me:ip", clientIp(request.headers), 60, 60), ["me:global", 3000, 60]]);
+  if (wait > 0) return tooManyRequests(wait);
   const identity = await resolveIdentity();
   // This GET writes (adoption), so a cross-site navigation must not trigger it.
-  const crossSite = (await headers()).get("sec-fetch-site") === "cross-site";
+  const crossSite = request.headers.get("sec-fetch-site") === "cross-site";
   if (identity.kind === "user" && !crossSite) await adoptGuestStrategies(identity.key);
   const usage = await readUsage(identity);
   const { plan } = identity;
