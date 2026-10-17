@@ -4,14 +4,19 @@ Only 1h candles are stored. Coverage per asset is kept contiguous by only ever e
 edges, so `min(open_time)`/`max(open_time)` fully describe what is already downloaded.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal, get_args
 
+import httpx
 import pandas as pd
 from psycopg import Connection
 
+from app.core.config import get_settings
 from app.services import market_data
+
+logger = logging.getLogger(__name__)
 
 Timeframe = Literal["1h", "4h", "1d", "1w", "1M"]
 TIMEFRAMES: tuple[Timeframe, ...] = get_args(Timeframe)
@@ -152,15 +157,34 @@ def resample(df: pd.DataFrame, timeframe: Timeframe, until: datetime) -> pd.Data
 
 
 def get_candles(
-    conn: Connection, asset: AssetRef, timeframe: Timeframe, start: datetime, end: datetime
+    conn: Connection,
+    asset: AssetRef,
+    timeframe: Timeframe,
+    start: datetime,
+    end: datetime,
+    *,
+    allow_stale: bool = False,
 ) -> pd.DataFrame:
-    """Candles in `timeframe` covering [start, end], downloading missing 1h data first."""
+    """Candles in `timeframe` covering [start, end], downloading missing 1h data first.
+
+    With `allow_stale`, a provider failure serves whatever is already stored in the range (it only
+    raises when nothing is), so charts keep working while Binance is unreachable or has banned the
+    server's IP. With `PROVIDER_FETCH_ENABLED=false` every caller gets the stored candles this way.
+    """
     if end - start < MIN_RANGE:
         raise InvalidRangeError("The range must be at least 1 day")
 
+    allow_stale = allow_stale or not get_settings().provider_fetch_enabled
     start = period_start(start, timeframe)
-    ensure_candles(conn, asset, start, end)
     until = min(period_start(end, "1h"), last_closed_open_time(datetime.now(UTC))) + HOUR
+    provider_error: httpx.HTTPError | None = None
+    try:
+        ensure_candles(conn, asset, start, end)
+    except httpx.HTTPError as exc:
+        if not allow_stale:
+            raise
+        conn.rollback()  # discards a partial download and releases the advisory lock
+        provider_error = exc
 
     rows = conn.execute(
         """
@@ -173,4 +197,10 @@ def get_candles(
     ).fetchall()
     df = pd.DataFrame(rows, columns=["open_time", *_OHLCV]).set_index("open_time")
     df.index = pd.to_datetime(df.index, utc=True)
+    if provider_error is not None:
+        if df.empty:
+            raise provider_error
+        logger.warning("Serving stored candles of asset %s: %r", asset.id, provider_error)
+        # The stored data may end earlier: cut there so the last resampled candle is not partial.
+        until = min(until, df.index[-1].to_pydatetime() + HOUR)
     return resample(df, timeframe, until)

@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     # Quotes are refreshed lazily on read once older than these TTLs.
     quote_ttl_seconds: int = 30
     market_cap_ttl_seconds: int = 3600
+    # Stale-while-revalidate: a price snapshot at most this old is served as is while it is refreshed
+    # in the background; older (or missing) ones are refreshed before answering.
+    quote_max_stale_seconds: int = 900
+    # `/health` warms quotes and stored candles in the background, at most this often.
+    warmup_min_interval_seconds: int = 300
+    # False: this process never calls Binance/CoinGecko and serves only what is stored (kept fresh
+    # by `python -m app.sync` running elsewhere, see docs/12-sincronizacion-local.md).
+    provider_fetch_enabled: bool = True
+    # Pause between rounds of `python -m app.sync`.
+    sync_interval_seconds: int = 15
 
     # Shared secret the web app sends in `X-Internal-Key` when it proxies a backtest. The web app
     # enforces the user quotas, so `/backtests/run` refuses any caller without it (and, unset,

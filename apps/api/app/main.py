@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.db import pool
 from app.core.security import BodySizeLimitMiddleware, make_rate_limit_middleware
 from app.services.candles import InvalidRangeError
-from app.services.market_data import ProviderBudgetError
+from app.services.market_data import ProviderBudgetError, ProviderDisabledError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -77,6 +77,14 @@ def provider_budget_handler(_: Request, __: ProviderBudgetError) -> JSONResponse
         status_code=503,
         content={"detail": "Market data provider budget exhausted, try again later"},
         headers={"Retry-After": "30"},
+    )
+
+
+@app.exception_handler(ProviderDisabledError)
+def provider_disabled_handler(_: Request, __: ProviderDisabledError) -> JSONResponse:
+    # 503 (not 502): the data is just not stored yet, and the web app refunds a 503 backtest.
+    return JSONResponse(
+        status_code=503, content={"detail": "Market data is not available right now"}
     )
 
 

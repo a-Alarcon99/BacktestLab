@@ -1,6 +1,8 @@
 """HTTP clients for the market data providers: Binance (prices, candles) and CoinGecko (market cap)."""
 
 import json
+import logging
+import threading
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -12,6 +14,8 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.security import limiter
+
+logger = logging.getLogger(__name__)
 
 BINANCE_KLINE_LIMIT = 1000
 _MAX_RETRIES = 3
@@ -51,28 +55,63 @@ class ProviderBudgetError(httpx.HTTPError):
     """Outbound call budget of this process is exhausted (protects against provider bans/costs)."""
 
 
+class ProviderDisabledError(httpx.HTTPError):
+    """Provider calls are turned off in this process (`PROVIDER_FETCH_ENABLED=false`)."""
+
+
+class ProviderBannedError(httpx.HTTPError):
+    """The provider banned this IP (Binance's 418); it is not called again until the ban ends."""
+
+
 # Longest a request may sleep on a provider's Retry-After: the thread and DB connection are held.
 _MAX_BACKOFF_SECONDS = 5
+# Ban length when a 418 comes without Retry-After (Binance's shortest ban is 2 minutes).
+_DEFAULT_BAN_SECONDS = 120
+# Monotonic deadline per provider host. Calling during a ban makes Binance extend it (up to 3 days).
+_banned_until: dict[str, float] = {}
+_ban_lock = threading.Lock()
 
 
-def _retry_after(value: str | None) -> int:
+def _ban_seconds(value: str | None) -> int:
     try:
-        return max(0, min(int(value or "1"), _MAX_BACKOFF_SECONDS))
+        return max(int(value), 1) if value else _DEFAULT_BAN_SECONDS
     except ValueError:
-        return 1
+        return _DEFAULT_BAN_SECONDS
+
+
+def _retry_after(value: str | None, attempt: int = 0) -> int:
+    """Provider's Retry-After, else exponential (1, 2, 4 s); always capped."""
+    default = 2**attempt
+    try:
+        return max(0, min(int(value) if value else default, _MAX_BACKOFF_SECONDS))
+    except ValueError:
+        return min(default, _MAX_BACKOFF_SECONDS)
 
 
 def _get(url: str, params: dict[str, Any], headers: dict[str, str] | None = None) -> Any:
-    """GET with short backoff on rate limiting (429, and Binance's 418 IP ban).
+    """GET with short, bounded backoff on rate limiting (429).
 
+    An IP ban (418) is never retried: the host is skipped until its Retry-After has passed.
     Every attempt, retries included, is charged to a per-process budget per minute.
     """
+    if not get_settings().provider_fetch_enabled:
+        raise ProviderDisabledError("Market data providers are disabled in this process")
+    host = httpx.URL(url).host
     for attempt in range(_MAX_RETRIES + 1):
+        with _ban_lock:
+            if time.monotonic() < _banned_until.get(host, 0.0):
+                raise ProviderBannedError(f"{host} banned this IP, waiting for the ban to end")
         if limiter.hit("provider", get_settings().provider_calls_per_minute, 60):
             raise ProviderBudgetError("Provider call budget exhausted")
         res = _client().get(url, params=params, headers=headers)
-        if res.status_code in (418, 429) and attempt < _MAX_RETRIES:
-            time.sleep(_retry_after(res.headers.get("Retry-After")))
+        if res.status_code == 418:
+            seconds = _ban_seconds(res.headers.get("Retry-After"))
+            with _ban_lock:
+                _banned_until[host] = time.monotonic() + seconds
+            logger.error("%s banned this IP for %s s (HTTP 418)", host, seconds)
+            res.raise_for_status()
+        if res.status_code == 429 and attempt < _MAX_RETRIES:
+            time.sleep(_retry_after(res.headers.get("Retry-After"), attempt))
             continue
         res.raise_for_status()
         return res.json()
@@ -146,11 +185,26 @@ def fetch_klines_1h(symbol: str, start: datetime, end: datetime) -> list[Kline]:
 
 
 def iter_klines_1h(symbol: str, start: datetime, end: datetime) -> Iterator[list[Kline]]:
-    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one."""
+    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one.
+
+    Bounded: never more requests than the range can need (plus one), and a page that doesn't move
+    the cursor forward is an error, so a misbehaving provider can't keep it asking for the same
+    page. Both cases raise instead of stopping early: a partial download could leave a hole in the
+    stored range, which must stay contiguous.
+    """
+    hours = int((end - start) / timedelta(hours=1)) + 1
+    max_requests = -(-hours // BINANCE_KLINE_LIMIT) + 1
     cursor = start
-    while cursor <= end:
+    for _ in range(max_requests):
+        if cursor > end:
+            return
         page = fetch_klines_1h(symbol, cursor, end)
         if not page:
             return
+        next_cursor = page[-1].open_time + timedelta(hours=1)
+        if next_cursor <= cursor:
+            raise httpx.HTTPError(f"Binance returned no newer candles for {symbol} after {cursor}")
         yield page
-        cursor = page[-1].open_time + timedelta(hours=1)
+        cursor = next_cursor
+    if cursor <= end:
+        raise httpx.HTTPError(f"Binance paging for {symbol} exceeded {max_requests} requests")

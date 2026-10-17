@@ -3,15 +3,24 @@ import { toNextJsHandler } from "better-auth/next-js";
 import { auth } from "@/lib/auth";
 import { readLimitedText } from "@/lib/server/body";
 import { clientIp } from "@/lib/server/identity";
-import { checkAll } from "@/lib/server/rate-limit";
+import { enforce, perClient, tooManyRequests, type Check } from "@/lib/server/rate-limit";
 
 const handler = toNextJsHandler(auth);
 
-export const GET = handler.GET;
+// Password hashing (scrypt) plus a few queries; the verification email is sent off the response path.
+export const maxDuration = 15;
 
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 
-type Check = [key: string, limit: number, windowSeconds: number];
+const rateLimited = (wait: number) =>
+  tooManyRequests(wait, "Demasiados intentos. Inténtalo más tarde.", "RATE_LIMITED");
+
+/** Session reads and email-verification links: cheap, but each one queries the database. */
+export async function GET(request: Request) {
+  const wait = await enforce([...perClient("auth:get:ip", clientIp(request.headers), 120, 60), ["auth:get:global", 6000, 60]]);
+  if (wait > 0) return rateLimited(wait);
+  return handler.GET(request);
+}
 
 /**
  * Limits that apply before Better Auth runs. Its own limiter is keyed on whatever address header
@@ -20,8 +29,7 @@ type Check = [key: string, limit: number, windowSeconds: number];
  * when the attacker spreads over many addresses. Per instance: the edge firewall is the shared layer.
  */
 function limitsFor(pathname: string, ip: string): Check[] {
-  const perIp = (name: string, limit: number, window: number): Check[] =>
-    ip === "unknown" ? [] : [[`auth:${name}:ip:${ip}`, limit, window]];
+  const perIp = (name: string, limit: number, window: number) => perClient(`auth:${name}:ip`, ip, limit, window);
 
   if (pathname.endsWith("/sign-up/email"))
     return [...perIp("signup", 5, 3600), ["auth:signup:global", 60, 3600]];
@@ -33,12 +41,8 @@ function limitsFor(pathname: string, ip: string): Check[] {
 }
 
 export async function POST(request: Request) {
-  const wait = checkAll(limitsFor(new URL(request.url).pathname, clientIp(request.headers)));
-  if (wait > 0)
-    return Response.json(
-      { code: "RATE_LIMITED", message: "Demasiados intentos. Inténtalo más tarde." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(wait)) } },
-    );
+  const wait = await enforce(limitsFor(new URL(request.url).pathname, clientIp(request.headers)));
+  if (wait > 0) return rateLimited(wait);
 
   const text = await readLimitedText(request, MAX_AUTH_BODY_BYTES);
   if (text === undefined) return Response.json({ code: "TOO_LARGE", message: "Petición demasiado grande." }, { status: 413 });

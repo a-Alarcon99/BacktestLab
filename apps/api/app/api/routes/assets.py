@@ -96,7 +96,7 @@ def get_asset_candles(
         lookback = CHART_LOOKBACK[timeframe]
         end = datetime.now(UTC)
         start = end - lookback if lookback else history_start
-    df = get_candles(conn, asset, timeframe, start, end)
+    df = get_candles(conn, asset, timeframe, start, end, allow_stale=True)
     return [
         Candle(time=t, open=r.open, high=r.high, low=r.low, close=r.close, volume=r.volume)
         for t, r in zip(df.index.to_pydatetime(), df.itertuples(index=False), strict=True)
