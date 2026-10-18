@@ -2,9 +2,11 @@
 
 import { useLayoutEffect } from "react"
 import { MoonIcon, SunIcon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 
 export function ThemeToggle() {
+  const { t } = useI18n()
   // In development Strict Mode remounts <html> and drops the class set by ThemeScript; re-apply it
   // before paint. No-op in production.
   useLayoutEffect(() => {
@@ -23,7 +25,7 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} aria-label="Cambiar tema">
+    <Button variant="ghost" size="icon" onClick={toggle} aria-label={t("Cambiar tema", "Toggle theme")}>
       <SunIcon className="hidden dark:block" />
       <MoonIcon className="dark:hidden" />
     </Button>

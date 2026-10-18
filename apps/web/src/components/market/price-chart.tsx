@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AreaSeries,
   CandlestickSeries,
@@ -13,17 +13,23 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts"
 import { cn } from "cn"
-import { formatPrice } from "@/lib/format"
+import { useI18n } from "@/components/i18n/locale-provider"
+import { useMoney } from "@/components/currency/currency-provider"
 import type { Candle } from "@/lib/candles"
+import { intlLocale, type Locale } from "@/lib/i18n"
 
 /** Candles shown on first render; the rest of the loaded history is reachable by dragging. */
 const INITIAL_VISIBLE = 100
 /** `onReachStart` fires when fewer than this many loaded candles are left to the left of the view. */
 const LOAD_OLDER_THRESHOLD = 30
 
-const axisNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
-const axisSmallNumber = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 4 })
-const volumeNumber = new Intl.NumberFormat("es-ES", { notation: "compact", maximumFractionDigits: 2 })
+const numbers = (locale: Locale) => ({
+  axis: new Intl.NumberFormat(intlLocale[locale], { maximumFractionDigits: 2 }),
+  axisSmall: new Intl.NumberFormat(intlLocale[locale], { maximumFractionDigits: 4 }),
+  volume: new Intl.NumberFormat(intlLocale[locale], { notation: "compact", maximumFractionDigits: 2 }),
+  change: new Intl.NumberFormat(intlLocale[locale], { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+})
+const numbersByLocale: Record<Locale, ReturnType<typeof numbers>> = { es: numbers("es"), en: numbers("en") }
 
 const toTime = (c: Candle) => (Date.parse(c.time) / 1000) as UTCTimestamp
 
@@ -74,7 +80,7 @@ function chartOptions(colors: ReturnType<typeof readColors>) {
  * candles. `onReachStart` asks the parent for that older page when the view nears the first candle.
  */
 function PriceChart({
-  candles,
+  candles: usdCandles,
   type = "line",
   intraday = false,
   onReachStart,
@@ -97,6 +103,15 @@ function PriceChart({
   const onReachStartRef = useRef(onReachStart)
   const [hovered, setHovered] = useState<Candle | null>(null)
   const [themeVersion, setThemeVersion] = useState(0)
+  const { locale, t } = useI18n()
+  const { convert } = useMoney()
+  const fmt = numbersByLocale[locale]
+  // Candles are in USD; the chart shows them in the display currency.
+  const candles = useMemo(
+    () =>
+      usdCandles.map((c) => ({ ...c, open: convert(c.open), high: convert(c.high), low: convert(c.low), close: convert(c.close) })),
+    [usdCandles, convert]
+  )
 
   // Line color follows the trend of the latest window, so prepending history doesn't flip it.
   const n = candles.length
@@ -164,7 +179,8 @@ function PriceChart({
     series.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } })
     chart.applyOptions({
       localization: {
-        priceFormatter: (p: number) => (p < 1 ? axisSmallNumber : axisNumber).format(p),
+        locale: intlLocale[locale],
+        priceFormatter: (p: number) => (p < 1 ? fmt.axisSmall : fmt.axis).format(p),
       },
     })
     seriesRef.current = series
@@ -175,7 +191,7 @@ function PriceChart({
       seriesRef.current = null
       if (chartRef.current) chart.removeSeries(series)
     }
-  }, [type, themeVersion, trendUp])
+  }, [type, themeVersion, trendUp, locale, fmt])
 
   // Data and viewport. Declared after the series effect so it always finds the series.
   useEffect(() => {
@@ -216,7 +232,7 @@ function PriceChart({
 
   return (
     <div className={cn("relative h-64 md:h-80", className)}>
-      <div ref={containerRef} className="size-full" role="img" aria-label="Gráfico de precio interactivo" />
+      <div ref={containerRef} className="size-full" role="img" aria-label={t("Gráfico de precio interactivo", "Interactive price chart")} />
       {hovered && <CandleInfo candle={hovered} intraday={intraday} />}
     </div>
   )
@@ -224,8 +240,10 @@ function PriceChart({
 
 /** Legend pinned to the top-left corner with the hovered candle's data. */
 function CandleInfo({ candle, intraday }: { candle: Candle; intraday: boolean }) {
+  const { locale, t } = useI18n()
+  const fmt = numbersByLocale[locale]
   const change = ((candle.close - candle.open) / candle.open) * 100
-  const date = new Intl.DateTimeFormat("es-ES", {
+  const date = new Intl.DateTimeFormat(intlLocale[locale], {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -238,23 +256,24 @@ function CandleInfo({ candle, intraday }: { candle: Candle; intraday: boolean })
         {date}
         {intraday && " UTC"}
       </span>
-      <Value label="A" value={candle.open} />
-      <Value label="Máx" value={candle.high} />
-      <Value label="Mín" value={candle.low} />
+      <Value label={t("A", "O")} value={candle.open} />
+      <Value label={t("Máx", "H")} value={candle.high} />
+      <Value label={t("Mín", "L")} value={candle.low} />
       <Value label="C" value={candle.close} />
       <span className={change >= 0 ? "text-up" : "text-down"}>
         {change >= 0 ? "+" : ""}
-        {change.toFixed(2).replace(".", ",")}%
+        {fmt.change.format(change)}%
       </span>
-      <span className="text-muted-foreground">Vol {volumeNumber.format(candle.volume)}</span>
+      <span className="text-muted-foreground">Vol {fmt.volume.format(candle.volume)}</span>
     </div>
   )
 }
 
 function Value({ label, value }: { label: string; value: number }) {
+  const { price } = useMoney()
   return (
     <span className="text-muted-foreground">
-      {label} <span className="text-foreground">{formatPrice(value)}</span>
+      {label} <span className="text-foreground">{price(value)}</span>
     </span>
   )
 }

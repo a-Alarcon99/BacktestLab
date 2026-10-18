@@ -3,26 +3,28 @@
 import Link from "next/link"
 import { ChevronRightIcon, LockIcon } from "lucide-react"
 import { cn } from "cn"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getPreset, presetInfo } from "@/lib/preset-strategies"
+import { numberFormat } from "@/lib/format"
 import { conditionSpecs, describeSize, specOf, type Rule } from "@/lib/strategy"
 import { ruleKinds } from "./rule-kind"
 
-const number = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
-
 /** Read-only view of a built-in strategy: its settings, rules and the reasoning behind them. */
 function PresetDetail({ id }: { id: string }) {
-  const strategy = getPreset(id)
+  const { locale, t, href } = useI18n()
+  const strategy = getPreset(id, locale)
   const info = presetInfo[id]
+  const number = numberFormat(locale, { maximumFractionDigits: 2 })
 
   if (!strategy || !info) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border-strong px-4 py-12 text-center">
-        <p className="font-semibold">Estrategia no encontrada</p>
-        <Link href="/strategies" className={buttonVariants({ variant: "outline" })}>
-          Volver a estrategias
+        <p className="font-semibold">{t("Estrategia no encontrada", "Strategy not found")}</p>
+        <Link href={href("/strategies")} className={buttonVariants({ variant: "outline" })}>
+          {t("Volver a estrategias", "Back to strategies")}
         </Link>
       </div>
     )
@@ -34,9 +36,9 @@ function PresetDetail({ id }: { id: string }) {
   return (
     <>
       <div className="flex flex-col gap-3">
-        <nav aria-label="Ruta" className="flex items-center gap-1 text-caption text-muted-foreground">
-          <Link href="/strategies" className="hover:text-foreground">
-            Estrategias
+        <nav aria-label={t("Ruta", "Breadcrumb")} className="flex items-center gap-1 text-caption text-muted-foreground">
+          <Link href={href("/strategies")} className="hover:text-foreground">
+            {t("Estrategias", "Strategies")}
           </Link>
           <ChevronRightIcon className="size-3" />
           <span className="truncate font-semibold text-foreground">{strategy.name}</span>
@@ -44,53 +46,55 @@ function PresetDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3">
             <h1>{strategy.name}</h1>
-            <Badge>{info.horizonLabel}</Badge>
+            <Badge>{info.horizonLabel[locale]}</Badge>
             <Badge variant="outline">
               <LockIcon className="size-3" />
-              Predefinida · solo lectura
+              {t("Predefinida · solo lectura", "Built-in · read-only")}
             </Badge>
           </div>
-          <p className="max-w-2xl text-muted-foreground">{info.summary}</p>
+          <p className="max-w-2xl text-muted-foreground">{info.summary[locale]}</p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Ajustes</CardTitle>
+          <CardTitle>{t("Ajustes", "Settings")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Setting label="Capital inicial" value={`${number.format(strategy.initialCapital)} USDT`} />
-          <Setting label="Comisión por orden" value={`${number.format(strategy.feePct)} %`} />
-          <Setting label="Temporalidad recomendada" value={info.timeframe} />
-          <Setting label="Duración típica" value={info.holding} />
+          <Setting label={t("Capital inicial", "Initial capital")} value={`${number.format(strategy.initialCapital)} USDT`} />
+          <Setting label={t("Comisión por orden", "Fee per order")} value={`${number.format(strategy.feePct)}${t(" %", "%")}`} />
+          <Setting label={t("Temporalidad recomendada", "Recommended timeframe")} value={info.timeframe[locale]} />
+          <Setting label={t("Duración típica", "Typical holding time")} value={info.holding[locale]} />
         </CardContent>
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <RuleGroup title="Reglas de compra" rules={buy} />
-        <RuleGroup title="Reglas de venta" rules={sell} />
+        <RuleGroup title={t("Reglas de compra", "Buy rules")} rules={buy} />
+        <RuleGroup title={t("Reglas de venta", "Sell rules")} rules={sell} />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Por qué estas reglas</CardTitle>
+          <CardTitle>{t("Por qué estas reglas", "Why these rules")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ul className="flex list-disc flex-col gap-2 pl-5">
             {info.rationale.map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line.es}>{line[locale]}</li>
             ))}
           </ul>
           <p className="text-caption text-muted-foreground">
-            <span className="font-semibold text-foreground">Cuándo falla: </span>
-            {info.risk}
+            <span className="font-semibold text-foreground">{t("Cuándo falla: ", "When it fails: ")}</span>
+            {info.risk[locale]}
           </p>
         </CardContent>
       </Card>
 
       <p className="text-caption text-muted-foreground">
-        Las estrategias predefinidas no se pueden modificar. Para adaptar una, crea una estrategia nueva con reglas
-        similares.
+        {t(
+          "Las estrategias predefinidas no se pueden modificar. Para adaptar una, crea una estrategia nueva con reglas similares.",
+          "Built-in strategies can't be changed. To adapt one, create a new strategy with similar rules."
+        )}
       </p>
     </>
   )
@@ -106,6 +110,7 @@ function Setting({ label, value }: { label: string; value: string }) {
 }
 
 function RuleGroup({ title, rules }: { title: string; rules: Rule[] }) {
+  const { locale, t } = useI18n()
   return (
     <Card>
       <CardHeader>
@@ -124,21 +129,23 @@ function RuleGroup({ title, rules }: { title: string; rules: Rule[] }) {
                   )}
                 >
                   <Icon className="size-3.5" />
-                  <span className="sr-only">{label}</span>
+                  <span className="sr-only">{label[locale]}</span>
                 </span>
                 <div className="flex min-w-0 flex-col gap-1">
                   <ul className="flex flex-col gap-0.5">
                     {rule.conditions.map((c, i) => (
                       <li key={i}>
-                        {i > 0 && <span className="mr-1 text-caption font-semibold text-muted-foreground">Y</span>}
+                        {i > 0 && (
+                          <span className="mr-1 text-caption font-semibold text-muted-foreground">{t("Y", "AND")}</span>
+                        )}
                         <span className="mr-1 text-caption text-muted-foreground">
-                          {conditionSpecs[c.kind].name}:
+                          {conditionSpecs[c.kind].name[locale]}:
                         </span>
-                        {specOf(c).describe(c)}
+                        {specOf(c).describe(c, locale)}
                       </li>
                     ))}
                   </ul>
-                  <span className="text-caption font-semibold">→ {describeSize(rule)}</span>
+                  <span className="text-caption font-semibold">→ {describeSize(rule, locale)}</span>
                 </div>
               </li>
             )

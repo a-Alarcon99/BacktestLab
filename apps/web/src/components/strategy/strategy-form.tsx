@@ -4,14 +4,17 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AlertTriangleIcon, InfoIcon, PlusIcon, SaveIcon, Trash2Icon, XIcon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, Input, Select } from "@/components/ui/input"
-import { rangePresets, timeframes, type RangePreset, type Timeframe } from "@/lib/candles"
-import { presetStrategies } from "@/lib/preset-strategies"
+import { rangePresetLabels, rangePresets, timeframes, type RangePreset, type Timeframe } from "@/lib/candles"
+import type { Translate } from "@/lib/i18n"
+import { presetNames } from "@/lib/preset-strategies"
 import { LimitCta } from "@/components/plan/plan-usage"
 import { saveStrategy, useStrategies } from "@/lib/storage/strategies"
+import { describeWebError } from "@/lib/web-api"
 import {
   conditionKinds,
   conditionSpecs,
@@ -22,6 +25,7 @@ import {
   MAX_CONDITIONS,
   MAX_RULES,
   newRule,
+  periodicLabel,
   validateStrategy,
   type Condition,
   type ConditionKind,
@@ -35,10 +39,27 @@ import {
 import { CandlePatternPicker } from "./candle-pattern-picker"
 import { ruleKinds } from "./rule-kind"
 
-const sideCopy = {
-  buy: { title: "Reglas de compra", add: "Añadir regla de compra", badge: "up", tag: "Entrada", noun: "compra" },
-  sell: { title: "Reglas de venta", add: "Añadir regla de venta", badge: "down", tag: "Salida", noun: "venta" },
-} as const
+const sideCopy = (t: Translate) =>
+  ({
+    buy: {
+      title: t("Reglas de compra", "Buy rules"),
+      add: t("Añadir regla de compra", "Add a buy rule"),
+      badge: "up",
+      tag: t("Entrada", "Entry"),
+      empty: t("Todavía no hay reglas de compra.", "No buy rules yet."),
+      rule: (n: number) => t(`Regla compra ${n}`, `Buy rule ${n}`),
+      remove: (n: number) => t(`Eliminar regla de compra ${n}`, `Delete buy rule ${n}`),
+    },
+    sell: {
+      title: t("Reglas de venta", "Sell rules"),
+      add: t("Añadir regla de venta", "Add a sell rule"),
+      badge: "down",
+      tag: t("Salida", "Exit"),
+      empty: t("Todavía no hay reglas de venta.", "No sell rules yet."),
+      rule: (n: number) => t(`Regla venta ${n}`, `Sell rule ${n}`),
+      remove: (n: number) => t(`Eliminar regla de venta ${n}`, `Delete sell rule ${n}`),
+    },
+  }) as const
 
 type RuleErrors = StrategyErrors["rules"][string]
 type UpdateRule = (id: string, update: (rule: Rule) => Rule) => void
@@ -50,6 +71,7 @@ type UpdateRule = (id: string, update: (rule: Rule) => Rule) => void
  */
 function StrategyForm({ strategy }: { strategy?: Strategy }) {
   const router = useRouter()
+  const { locale, t, href } = useI18n()
   const editing = strategy !== undefined
   const { data: strategies } = useStrategies()
   const [draft, setDraft] = useState<StrategyDraft>(() => ({
@@ -66,9 +88,9 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
 
   const errors = useMemo(() => {
     const own = (strategies ?? []).filter((s) => s.id !== strategy?.id).map((s) => s.name)
-    const taken = [...presetStrategies.map((s) => s.name), ...own]
-    return validateStrategy(draft, taken)
-  }, [draft, strategies, strategy?.id])
+    const taken = [...presetNames, ...own]
+    return validateStrategy(draft, taken, locale)
+  }, [draft, strategies, strategy?.id, locale])
 
   const buy = draft.rules.filter((r) => r.side === "buy")
   const sell = draft.rules.filter((r) => r.side === "sell")
@@ -88,9 +110,9 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
     setSaving(true)
     try {
       await saveStrategy(draft, strategy?.id)
-      router.push("/strategies")
+      router.push(href("/strategies"))
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "No se pudo guardar la estrategia.")
+      setSaveError(describeWebError(error, locale, t("No se pudo guardar la estrategia.", "Couldn't save the strategy.")))
       setSaving(false)
     }
   }
@@ -110,23 +132,26 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
       <div className="flex min-w-0 flex-col gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Información</CardTitle>
+            <CardTitle>{t("Información", "Details")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="Nombre de la estrategia"
+              label={t("Nombre de la estrategia", "Strategy name")}
               htmlFor="name"
               className="sm:col-span-2"
               hint={
                 <FieldError show={submitted} error={errors.name}>
-                  Debe ser único: no puede haber dos estrategias con el mismo nombre.
+                  {t(
+                    "Debe ser único: no puede haber dos estrategias con el mismo nombre.",
+                    "Must be unique: two strategies can't share a name."
+                  )}
                 </FieldError>
               }
             >
               <Input
                 id="name"
                 name="name"
-                placeholder="Ej. RSI con filtro de volumen"
+                placeholder={t("Ej. RSI con filtro de volumen", "E.g. RSI with volume filter")}
                 value={draft.name}
                 onChange={(event) => setDraft((d) => ({ ...d, name: event.target.value }))}
                 autoComplete="off"
@@ -134,7 +159,7 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
               />
             </Field>
             <Field
-              label="Capital inicial"
+              label={t("Capital inicial", "Initial capital")}
               htmlFor="capital"
               hint={<FieldError show={submitted} error={errors.initialCapital} />}
             >
@@ -146,11 +171,11 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
               />
             </Field>
             <Field
-              label="Comisión por orden"
+              label={t("Comisión por orden", "Fee per order")}
               htmlFor="fee"
               hint={
                 <FieldError show={submitted} error={errors.feePct}>
-                  Binance spot cobra un 0,1 %.
+                  {t("Binance spot cobra un 0,1 %.", "Binance spot charges 0.1%.")}
                 </FieldError>
               }
             >
@@ -163,9 +188,9 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
               />
             </Field>
             <Field
-              label="Temporalidad recomendada (opcional)"
+              label={t("Temporalidad recomendada (opcional)", "Recommended timeframe (optional)")}
               htmlFor="rec-timeframe"
-              hint="Se muestra al elegir la estrategia en un activo."
+              hint={t("Se muestra al elegir la estrategia en un activo.", "Shown when the strategy is picked on an asset.")}
             >
               <Select
                 id="rec-timeframe"
@@ -175,18 +200,18 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
                   setDraft((d) => ({ ...d, recommendedTimeframe: (event.target.value || undefined) as Timeframe | undefined }))
                 }
               >
-                <option value="">Sin recomendación</option>
-                {timeframes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                <option value="">{t("Sin recomendación", "No recommendation")}</option>
+                {timeframes.map((tf) => (
+                  <option key={tf} value={tf}>
+                    {tf}
                   </option>
                 ))}
               </Select>
             </Field>
             <Field
-              label="Periodo recomendado (opcional)"
+              label={t("Periodo recomendado (opcional)", "Recommended period (optional)")}
               htmlFor="rec-range"
-              hint="Rango de fechas con el que mejor funciona."
+              hint={t("Rango de fechas con el que mejor funciona.", "Date range it works best with.")}
             >
               <Select
                 id="rec-range"
@@ -196,10 +221,10 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
                   setDraft((d) => ({ ...d, recommendedRange: (event.target.value || undefined) as RangePreset | undefined }))
                 }
               >
-                <option value="">Sin recomendación</option>
+                <option value="">{t("Sin recomendación", "No recommendation")}</option>
                 {rangePresets.map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    {rangePresetLabels[locale][r]}
                   </option>
                 ))}
               </Select>
@@ -225,21 +250,21 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
       <aside className="flex flex-col gap-4 lg:sticky lg:top-[calc(var(--spacing-header)+2rem)]">
         <Card>
           <CardHeader>
-            <CardTitle>Resumen</CardTitle>
-            <Badge variant={editing ? "primary" : "default"}>{editing ? "Editando" : "Borrador"}</Badge>
+            <CardTitle>{t("Resumen", "Summary")}</CardTitle>
+            <Badge variant={editing ? "primary" : "default"}>{editing ? t("Editando", "Editing") : t("Borrador", "Draft")}</Badge>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <dl className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-up-soft px-3 py-2.5">
-                <dt className="text-caption text-muted-foreground">Compra</dt>
+                <dt className="text-caption text-muted-foreground">{t("Compra", "Buy")}</dt>
                 <dd className="num text-title font-bold text-up">
-                  {buy.length} {buy.length === 1 ? "regla" : "reglas"}
+                  {buy.length} {buy.length === 1 ? t("regla", "rule") : t("reglas", "rules")}
                 </dd>
               </div>
               <div className="rounded-lg bg-down-soft px-3 py-2.5">
-                <dt className="text-caption text-muted-foreground">Venta</dt>
+                <dt className="text-caption text-muted-foreground">{t("Venta", "Sell")}</dt>
                 <dd className="num text-title font-bold text-down">
-                  {sell.length} {sell.length === 1 ? "regla" : "reglas"}
+                  {sell.length} {sell.length === 1 ? t("regla", "rule") : t("reglas", "rules")}
                 </dd>
               </div>
             </dl>
@@ -255,8 +280,10 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
             ) : (
               <p className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-caption text-muted-foreground">
                 <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
-                Las condiciones de una regla se cumplen a la vez (Y). Una regla de compra y otra de venta no pueden
-                activarse con el mismo indicador a la vez. Máximo {MAX_RULES} reglas.
+                {t(
+                  `Las condiciones de una regla se cumplen a la vez (Y). Una regla de compra y otra de venta no pueden activarse con el mismo indicador a la vez. Máximo ${MAX_RULES} reglas.`,
+                  `A rule's conditions must all hold at once (AND). A buy rule and a sell rule can't fire on the same indicator at the same time. ${MAX_RULES} rules at most.`
+                )}
               </p>
             )}
             {saveError && (
@@ -267,12 +294,12 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
             )}
           </CardContent>
           <footer className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end md:px-5 lg:flex-col-reverse xl:flex-row">
-            <Link href="/strategies" className={buttonVariants({ variant: "outline", size: "lg" })}>
-              Cancelar
+            <Link href={href("/strategies")} className={buttonVariants({ variant: "outline", size: "lg" })}>
+              {t("Cancelar", "Cancel")}
             </Link>
             <Button type="submit" size="lg" disabled={saving || !strategies}>
               <SaveIcon data-icon="inline-start" />
-              {editing ? "Guardar cambios" : "Guardar estrategia"}
+              {editing ? t("Guardar cambios", "Save changes") : t("Guardar estrategia", "Save strategy")}
             </Button>
           </footer>
         </Card>
@@ -301,7 +328,8 @@ function RuleSection({
   onUpdate: UpdateRule
   onRemove: (id: string) => void
 }) {
-  const copy = sideCopy[side]
+  const { locale, t } = useI18n()
+  const copy = sideCopy(t)[side]
   return (
     <Card>
       <CardHeader>
@@ -311,8 +339,12 @@ function RuleSection({
       <CardContent className="flex flex-col gap-4">
         {rules.length === 0 && (
           <p className="rounded-lg border border-dashed border-border-strong px-4 py-6 text-center text-caption text-muted-foreground">
-            Todavía no hay reglas de {copy.noun}.
-            {side === "sell" && " Sin reglas de venta, la posición se mantiene hasta el final del backtest."}
+            {copy.empty}
+            {side === "sell" &&
+              t(
+                " Sin reglas de venta, la posición se mantiene hasta el final del backtest.",
+                " Without sell rules, the position is held until the end of the backtest."
+              )}
           </p>
         )}
         {rules.map((rule, index) => (
@@ -328,11 +360,12 @@ function RuleSection({
         ))}
         <div className="flex flex-col gap-2 border-t pt-4">
           <span className="text-caption font-semibold text-muted-foreground">
-            {canAdd ? copy.add : `Has llegado al máximo de ${MAX_RULES} reglas.`}
+            {canAdd ? copy.add : t(`Has llegado al máximo de ${MAX_RULES} reglas.`, `You've reached the maximum of ${MAX_RULES} rules.`)}
           </span>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {(Object.keys(ruleKinds) as RuleKind[]).map((kind) => {
               const { Icon, label, description } = ruleKinds[kind]
+              const text = { label: label[locale], description: description[locale] }
               return (
                 <button
                   key={kind}
@@ -344,9 +377,9 @@ function RuleSection({
                   <span className="flex items-center gap-1.5 font-semibold">
                     <PlusIcon className="size-3.5 text-muted-foreground group-hover:text-primary" />
                     <Icon className="size-4 text-muted-foreground group-hover:text-primary" />
-                    {label}
+                    {text.label}
                   </span>
-                  <span className="text-caption text-muted-foreground">{description}</span>
+                  <span className="text-caption text-muted-foreground">{text.description}</span>
                 </button>
               )
             })}
@@ -373,6 +406,8 @@ function RuleCard({
   onUpdate: (update: (rule: Rule) => Rule) => void
   onRemove: () => void
 }) {
+  const { locale, t } = useI18n()
+  const copy = sideCopy(t)[rule.side]
   const id = `rule-${rule.id}`
   const setCondition = (index: number, condition: Condition) =>
     onUpdate((r) => ({ ...r, conditions: r.conditions.map((c, i) => (i === index ? condition : c)) }))
@@ -395,14 +430,12 @@ function RuleCard({
       }
     >
       <div className="flex items-center justify-between gap-2">
-        <Badge variant="primary">
-          Regla {sideCopy[rule.side].noun} {position}
-        </Badge>
+        <Badge variant="primary">{copy.rule(position)}</Badge>
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={`Eliminar regla de ${sideCopy[rule.side].noun} ${position}`}
+          aria-label={copy.remove(position)}
           className="hover:bg-down-soft hover:text-down"
           onClick={onRemove}
         >
@@ -415,7 +448,7 @@ function RuleCard({
           <div key={index} className="flex flex-col gap-2">
             {index > 0 && (
               <span className="self-start rounded-md bg-muted px-2 py-0.5 text-caption font-semibold text-muted-foreground">
-                Y
+                {t("Y", "AND")}
               </span>
             )}
             <ConditionEditor
@@ -431,7 +464,7 @@ function RuleCard({
         {rule.conditions.length < MAX_CONDITIONS && (
           <Button type="button" variant="ghost" size="sm" className="self-start" onClick={addCondition}>
             <PlusIcon data-icon="inline-start" />
-            Añadir condición (Y)
+            {t("Añadir condición (Y)", "Add condition (AND)")}
           </Button>
         )}
       </div>
@@ -439,7 +472,7 @@ function RuleCard({
       <div className="grid gap-3 border-t pt-3 sm:grid-cols-2">
         {rule.side === "buy" ? (
           <>
-            <Field label="Tamaño de la compra" htmlFor={`${id}-unit`}>
+            <Field label={t("Tamaño de la compra", "Buy size")} htmlFor={`${id}-unit`}>
               <Select
                 id={`${id}-unit`}
                 value={rule.size.unit}
@@ -448,12 +481,12 @@ function RuleCard({
                   onUpdate((r) => ({ ...r, size: { unit, value: 100 } }))
                 }}
               >
-                <option value="pct">% del efectivo disponible</option>
-                <option value="usdt">Importe fijo en USDT</option>
+                <option value="pct">{t("% del efectivo disponible", "% of available cash")}</option>
+                <option value="usdt">{t("Importe fijo en USDT", "Fixed amount in USDT")}</option>
               </Select>
             </Field>
             <Field
-              label={rule.size.unit === "pct" ? "Porcentaje" : "Importe"}
+              label={rule.size.unit === "pct" ? t("Porcentaje", "Percentage") : t("Importe", "Amount")}
               htmlFor={`${id}-size`}
               hint={<FieldError show={showErrors} error={errors.size} />}
             >
@@ -467,7 +500,7 @@ function RuleCard({
           </>
         ) : (
           <Field
-            label="Vender de la posición abierta"
+            label={t("Vender de la posición abierta", "Sell of the open position")}
             htmlFor={`${id}-size`}
             hint={<FieldError show={showErrors} error={errors.size} />}
           >
@@ -481,7 +514,7 @@ function RuleCard({
         )}
       </div>
 
-      <p className="text-caption text-muted-foreground">{describeRule(rule)}</p>
+      <p className="text-caption text-muted-foreground">{describeRule(rule, locale)}</p>
       {errors.conflicts.map((message) => (
         <p key={message} className="flex items-start gap-2 text-caption font-semibold text-down">
           <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
@@ -492,12 +525,12 @@ function RuleCard({
   )
 }
 
-const families: { family: RuleKind; label: string }[] = [
-  { family: "indicator", label: "Indicadores" },
-  { family: "price", label: "Precio" },
-  { family: "volume", label: "Volumen" },
-  { family: "pattern", label: "Patrones de velas" },
-  { family: "periodic", label: "Periódica" },
+const families = (t: Translate): { family: RuleKind; label: string }[] => [
+  { family: "indicator", label: t("Indicadores", "Indicators") },
+  { family: "price", label: t("Precio", "Price") },
+  { family: "volume", label: t("Volumen", "Volume") },
+  { family: "pattern", label: t("Patrones de velas", "Candlestick patterns") },
+  { family: "periodic", label: t("Periódica", "Periodic") },
 ]
 
 /** Condition kind picker + the fields of that kind. */
@@ -516,6 +549,8 @@ function ConditionEditor({
   onChange: (condition: Condition) => void
   onRemove?: () => void
 }) {
+  const { locale, t } = useI18n()
+  const candles = t("velas", "candles")
   // `set` merges a partial update of the same kind.
   const set = (patch: Partial<Condition>) => onChange({ ...c, ...patch } as Condition)
   const num = (field: string, label: string, value: number, extra?: { suffix?: string; step?: number }) => (
@@ -544,47 +579,53 @@ function ConditionEditor({
       </Select>
     </Field>
   )
-  const direction = (up: string, down: string) => select("direction", "Dirección", (c as { direction: "up" | "down" }).direction, [["up", up], ["down", down]])
+  const direction = (up: string, down: string) => select("direction", t("Dirección", "Direction"), (c as { direction: "up" | "down" }).direction, [["up", up], ["down", down]])
 
   let fields: React.ReactNode
   switch (c.kind) {
     case "rsi":
       fields = (
         <>
-          {num("period", "Periodo", c.period, { suffix: "velas" })}
-          {select("op", "Condición", c.op, [["below", "Por debajo de"], ["above", "Por encima de"]])}
-          {num("value", "Valor", c.value)}
+          {num("period", t("Periodo", "Period"), c.period, { suffix: candles })}
+          {select("op", t("Condición", "Condition"), c.op, [
+            ["below", t("Por debajo de", "Below")],
+            ["above", t("Por encima de", "Above")],
+          ])}
+          {num("value", t("Valor", "Value"), c.value)}
         </>
       )
       break
     case "ma-cross":
       fields = (
         <>
-          {select("ma", "Tipo de media", c.ma, [["sma", "Simple (SMA)"], ["ema", "Exponencial (EMA)"]])}
-          {num("fast", "Media rápida", c.fast, { suffix: "velas" })}
-          {num("slow", "Media lenta", c.slow, { suffix: "velas" })}
-          {direction("La rápida cruza al alza", "La rápida cruza a la baja")}
+          {select("ma", t("Tipo de media", "Average type"), c.ma, [
+            ["sma", t("Simple (SMA)", "Simple (SMA)")],
+            ["ema", t("Exponencial (EMA)", "Exponential (EMA)")],
+          ])}
+          {num("fast", t("Media rápida", "Fast average"), c.fast, { suffix: candles })}
+          {num("slow", t("Media lenta", "Slow average"), c.slow, { suffix: candles })}
+          {direction(t("La rápida cruza al alza", "Fast crosses above"), t("La rápida cruza a la baja", "Fast crosses below"))}
         </>
       )
       break
     case "macd":
       fields = (
         <>
-          {num("fast", "Rápida", c.fast)}
-          {num("slow", "Lenta", c.slow)}
-          {num("signal", "Señal", c.signal)}
-          {direction("Cruza al alza la señal", "Cruza a la baja la señal")}
+          {num("fast", t("Rápida", "Fast"), c.fast)}
+          {num("slow", t("Lenta", "Slow"), c.slow)}
+          {num("signal", t("Señal", "Signal"), c.signal)}
+          {direction(t("Cruza al alza la señal", "Crosses above the signal"), t("Cruza a la baja la señal", "Crosses below the signal"))}
         </>
       )
       break
     case "bollinger":
       fields = (
         <>
-          {num("period", "Periodo", c.period, { suffix: "velas" })}
-          {num("stdDev", "Desviaciones", c.stdDev, { suffix: "σ", step: 0.1 })}
-          {select("band", "Condición", c.band, [
-            ["lower", "Cierre bajo la banda inferior"],
-            ["upper", "Cierre sobre la banda superior"],
+          {num("period", t("Periodo", "Period"), c.period, { suffix: candles })}
+          {num("stdDev", t("Desviaciones", "Std. deviations"), c.stdDev, { suffix: "σ", step: 0.1 })}
+          {select("band", t("Condición", "Condition"), c.band, [
+            ["lower", t("Cierre bajo la banda inferior", "Close below the lower band")],
+            ["upper", t("Cierre sobre la banda superior", "Close above the upper band")],
           ])}
         </>
       )
@@ -592,36 +633,39 @@ function ConditionEditor({
     case "donchian":
       fields = (
         <>
-          {num("period", "Canal de", c.period, { suffix: "velas" })}
-          {direction("Rompe el máximo", "Rompe el mínimo")}
+          {num("period", t("Canal de", "Channel of"), c.period, { suffix: candles })}
+          {direction(t("Rompe el máximo", "Breaks the high"), t("Rompe el mínimo", "Breaks the low"))}
         </>
       )
       break
     case "price-change":
       fields = (
         <>
-          {direction("El precio sube", "El precio cae")}
-          {num("pct", "Más de un", c.pct, { suffix: "%", step: 0.1 })}
-          <Field label="Medido" htmlFor={`${id}-window`}>
+          {direction(t("El precio sube", "Price rises"), t("El precio cae", "Price falls"))}
+          {num("pct", t("Más de un", "More than"), c.pct, { suffix: "%", step: 0.1 })}
+          <Field label={t("Medido", "Measured")} htmlFor={`${id}-window`}>
             <Select
               id={`${id}-window`}
               value={c.lookback === "entry" ? "entry" : "candles"}
               onChange={(event) => set({ lookback: event.target.value === "entry" ? "entry" : 24 })}
             >
-              <option value="candles">En las últimas N velas</option>
-              <option value="entry">Desde la compra</option>
+              <option value="candles">{t("En las últimas N velas", "Over the last N candles")}</option>
+              <option value="entry">{t("Desde la compra", "Since the buy")}</option>
             </Select>
           </Field>
-          {c.lookback !== "entry" && num("lookback", "Velas", c.lookback, { suffix: "velas" })}
+          {c.lookback !== "entry" && num("lookback", t("Velas", "Candles"), c.lookback, { suffix: candles })}
         </>
       )
       break
     case "volume":
       fields = (
         <>
-          {select("op", "Condición", c.op, [["above", "Supera"], ["below", "Cae por debajo de"]])}
-          {num("multiple", "Múltiplo de la media", c.multiple, { suffix: "×", step: 0.1 })}
-          {num("period", "Media de", c.period, { suffix: "velas" })}
+          {select("op", t("Condición", "Condition"), c.op, [
+            ["above", t("Supera", "Exceeds")],
+            ["below", t("Cae por debajo de", "Drops below")],
+          ])}
+          {num("multiple", t("Múltiplo de la media", "Multiple of the average"), c.multiple, { suffix: "×", step: 0.1 })}
+          {num("period", t("Media de", "Average of"), c.period, { suffix: candles })}
         </>
       )
       break
@@ -629,10 +673,10 @@ function ConditionEditor({
       fields = <CandlePatternPicker id={id} value={c.pattern} onChange={(pattern) => set({ pattern })} />
       break
     case "periodic":
-      fields = select("every", "Frecuencia", c.every, [
-        ["day", "Cada día"],
-        ["week", "Cada semana (lunes)"],
-        ["month", "Cada mes (día 1)"],
+      fields = select("every", t("Frecuencia", "Frequency"), c.every, [
+        ["day", periodicLabel.day[locale]],
+        ["week", periodicLabel.week[locale]],
+        ["month", periodicLabel.month[locale]],
       ])
       break
   }
@@ -640,19 +684,19 @@ function ConditionEditor({
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
       <div className="flex items-end gap-2">
-        <Field label="Condición" htmlFor={`${id}-kind`} className="flex-1 sm:max-w-64">
+        <Field label={t("Condición", "Condition")} htmlFor={`${id}-kind`} className="flex-1 sm:max-w-64">
           <Select
             id={`${id}-kind`}
             value={c.kind}
             onChange={(event) => onChange(conditionSpecs[event.target.value as ConditionKind].defaults(side))}
           >
-            {families.map(({ family, label }) => (
+            {families(t).map(({ family, label }) => (
               <optgroup key={family} label={label}>
                 {conditionKinds
                   .filter((kind) => conditionSpecs[kind].family === family)
                   .map((kind) => (
                     <option key={kind} value={kind}>
-                      {conditionSpecs[kind].name}
+                      {conditionSpecs[kind].name[locale]}
                     </option>
                   ))}
               </optgroup>
@@ -660,7 +704,7 @@ function ConditionEditor({
           </Select>
         </Field>
         {onRemove && (
-          <Button type="button" variant="ghost" size="icon" aria-label="Quitar condición" onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon" aria-label={t("Quitar condición", "Remove condition")} onClick={onRemove}>
             <XIcon />
           </Button>
         )}

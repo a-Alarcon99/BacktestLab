@@ -1,6 +1,7 @@
 "use client"
 
 import { Trash2Icon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 
@@ -13,7 +14,7 @@ function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Eliminar",
+  confirmLabel,
   onConfirm,
 }: {
   open: boolean
@@ -23,6 +24,7 @@ function ConfirmDialog({
   confirmLabel?: string
   onConfirm: () => void
 }) {
+  const { t } = useI18n()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(28rem,calc(100vw-1.5rem))]">
@@ -38,7 +40,7 @@ function ConfirmDialog({
         </header>
         <footer className="flex flex-col-reverse gap-2 px-4 py-3 sm:flex-row sm:justify-end md:px-5">
           <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {t("Cancelar", "Cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -48,7 +50,7 @@ function ConfirmDialog({
               onOpenChange(false)
             }}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("Eliminar", "Delete")}
           </Button>
         </footer>
       </DialogContent>

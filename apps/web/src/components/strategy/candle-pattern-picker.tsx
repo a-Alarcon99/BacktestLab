@@ -1,3 +1,6 @@
+"use client"
+
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import {
   biasLabel,
@@ -16,13 +19,17 @@ const PAD = 4
 
 /** Schematic candles of a pattern: green = bullish, red = bearish, wicks and bodies to scale. */
 function PatternIllustration({ pattern, className }: { pattern: CandlePattern; className?: string }) {
+  const { t } = useI18n()
   const width = pattern.candles.length * SLOT + PAD * 2
   const y = (value: number) => PAD + ((100 - value) / 100) * (HEIGHT - PAD * 2)
   return (
     <svg
       viewBox={`0 0 ${width} ${HEIGHT}`}
       role="img"
-      aria-label={`Esquema de ${pattern.name}: ${pattern.candles.length} ${pattern.candles.length === 1 ? "vela" : "velas"}`}
+      aria-label={t(
+        `Esquema de ${pattern.name.es}: ${pattern.candles.length} ${pattern.candles.length === 1 ? "vela" : "velas"}`,
+        `${pattern.name.en} diagram: ${pattern.candles.length} ${pattern.candles.length === 1 ? "candle" : "candles"}`
+      )}
       className={cn("h-16 w-auto shrink-0", className)}
     >
       {pattern.candles.map(([open, high, low, close], i) => {
@@ -52,13 +59,16 @@ function CandlePatternPicker({
   value: PatternId
   onChange: (pattern: PatternId) => void
 }) {
+  const { locale, t } = useI18n()
   const selected = patternById[value]
+  const groupLabel = (bias: PatternBias) =>
+    t(`Patrones ${biasLabel[bias].es.toLowerCase()}s`, `${biasLabel[bias].en} patterns`)
   return (
     <div className="flex flex-col gap-3 sm:col-span-2 xl:col-span-4">
       {(["bullish", "bearish"] as PatternBias[]).map((bias) => (
-        <div key={bias} role="radiogroup" aria-label={`Patrones ${biasLabel[bias].toLowerCase()}s`} className="flex flex-col gap-2">
+        <div key={bias} role="radiogroup" aria-label={groupLabel(bias)} className="flex flex-col gap-2">
           <span className="text-caption font-semibold text-muted-foreground">
-            Patrones {biasLabel[bias].toLowerCase()}s
+            {groupLabel(bias)}
           </span>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {candlePatterns
@@ -81,10 +91,10 @@ function CandlePatternPicker({
                     <PatternIllustration pattern={pattern} className="w-14" />
                     <span className="flex min-w-0 flex-col gap-1">
                       <span className="flex flex-wrap items-center gap-1.5 font-semibold">
-                        {pattern.name}
-                        <Badge variant={bias === "bullish" ? "up" : "down"}>{biasLabel[bias]}</Badge>
+                        {pattern.name[locale]}
+                        <Badge variant={bias === "bullish" ? "up" : "down"}>{biasLabel[bias][locale]}</Badge>
                       </span>
-                      <span className="text-caption text-muted-foreground">{pattern.description}</span>
+                      <span className="text-caption text-muted-foreground">{pattern.description[locale]}</span>
                     </span>
                   </button>
                 )
@@ -93,8 +103,8 @@ function CandlePatternPicker({
         </div>
       ))}
       <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-caption text-muted-foreground">
-        <span className="font-semibold">{selected.name}:</span> {selected.rule} Se evalúa al cierre de la última vela
-        del patrón.
+        <span className="font-semibold">{selected.name[locale]}:</span> {selected.rule[locale]}{" "}
+        {t("Se evalúa al cierre de la última vela del patrón.", "Evaluated at the close of the pattern's last candle.")}
       </p>
     </div>
   )

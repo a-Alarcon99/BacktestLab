@@ -5,18 +5,22 @@ import { createPortal } from "react-dom"
 import Link from "next/link"
 import { MenuIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { siteConfig } from "@/config/site"
+import { CurrencySwitcher } from "./currency-switcher"
+import { LanguageSwitcher } from "./language-switcher"
 import { UserMenu } from "./user-menu"
 
 export function MobileNav() {
   const [open, setOpen] = useState(false)
+  const { locale, t, href } = useI18n()
 
   return (
     <div className="lg:hidden">
       <Button
         variant="ghost"
         size="icon"
-        aria-label={open ? "Cerrar menú" : "Abrir menú"}
+        aria-label={open ? t("Cerrar menú", "Close menu") : t("Abrir menú", "Open menu")}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -31,14 +35,18 @@ export function MobileNav() {
               {siteConfig.nav.map((item) => (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={href(item.href)}
                   onClick={() => setOpen(false)}
                   className="flex h-12 items-center border-b text-title font-semibold"
                 >
-                  {item.label}
+                  {item.label[locale]}
                 </Link>
               ))}
             </nav>
+            <div className="container-page flex gap-2 pt-4 sm:hidden">
+              <LanguageSwitcher />
+              <CurrencySwitcher />
+            </div>
             <div className="container-page py-4" onClick={() => setOpen(false)}>
               <UserMenu stacked />
             </div>

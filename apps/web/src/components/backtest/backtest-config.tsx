@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { FlaskConicalIcon, PlayIcon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,21 +15,19 @@ import {
   defaultTimeframe,
   estimateCandles,
   presetFrom,
+  rangePresetLabels,
   rangePresets,
   timeframes,
   type RangePreset,
   type Timeframe,
 } from "@/lib/candles"
-import { formatDate } from "@/lib/format"
+import { formatDate, numberFormat } from "@/lib/format"
 import { isPreset } from "@/lib/preset-strategies"
 import { useRunnableStrategies } from "@/lib/storage/strategies"
 import { ReplayPlayer, type ReplayRun } from "./backtest-replay"
 
 const DEFAULT_PRESET: RangePreset = "3A"
 
-// es-ES skips grouping for 4-digit numbers by default ("6570"); force "6.570".
-const candleCount = new Intl.NumberFormat("es-ES", { useGrouping: "always" })
-const capitalFormat = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
 
 /**
  * Backtest parameters: date range (presets + explicit from/to) and timeframe first, because
@@ -52,6 +51,9 @@ function BacktestConfig({
   const [to, setTo] = useState(today)
   const [strategyId, setStrategyId] = useState<string | null>(null)
   const { replayOpen, setReplayOpen } = useAssetView()
+  const { locale, t, href } = useI18n()
+  const candleCount = numberFormat(locale, { useGrouping: "always" })
+  const capitalFormat = numberFormat(locale, { maximumFractionDigits: 2 })
 
   // Defaults to the user's most recently updated strategy (else the first preset) until one is picked.
   const strategy =
@@ -69,15 +71,16 @@ function BacktestConfig({
   return (
     <Card id="backtest" className="scroll-mt-[calc(var(--spacing-header)+1rem)]">
       <CardHeader>
-        <CardTitle>Configurar backtest</CardTitle>
-        <Badge>Borrador</Badge>
+        <CardTitle>{t("Configurar backtest", "Set up backtest")}</CardTitle>
+        <Badge>{t("Borrador", "Draft")}</Badge>
       </CardHeader>
 
       <CardContent className="grid gap-6 lg:grid-cols-2">
-        <Field label="Rango de fechas" className="lg:col-span-2">
+        <Field label={t("Rango de fechas", "Date range")} className="lg:col-span-2">
           <SegmentedControl
-            label="Rango predefinido"
+            label={t("Rango predefinido", "Preset range")}
             options={rangePresets}
+            labels={rangePresetLabels[locale]}
             value={preset ?? ("" as RangePreset)}
             onValueChange={(next) => {
               setPreset(next)
@@ -90,7 +93,7 @@ function BacktestConfig({
           <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
             <DateInput
               id="from"
-              label="Desde"
+              label={t("Desde", "From")}
               value={from}
               min={historySince}
               max={to || today}
@@ -102,7 +105,7 @@ function BacktestConfig({
             <span aria-hidden className="hidden text-muted-foreground sm:block">→</span>
             <DateInput
               id="to"
-              label="Hasta"
+              label={t("Hasta", "To")}
               value={to}
               min={from || historySince}
               max={today}
@@ -113,13 +116,14 @@ function BacktestConfig({
             />
           </div>
           <p className="text-caption text-muted-foreground">
-            Histórico disponible desde <span className="num font-semibold">{formatDate(historySince)}</span>
+            {t("Histórico disponible desde", "History available since")}{" "}
+            <span className="num font-semibold">{formatDate(historySince, locale)}</span>
           </p>
         </Field>
 
-        <Field label="Temporalidad" className="lg:col-span-2">
+        <Field label={t("Temporalidad", "Timeframe")} className="lg:col-span-2">
           <SegmentedControl
-            label="Temporalidad"
+            label={t("Temporalidad", "Timeframe")}
             options={timeframes}
             value={timeframe}
             onValueChange={setTimeframe}
@@ -128,32 +132,40 @@ function BacktestConfig({
         </Field>
 
         <Field
-          label="Estrategia"
+          label={t("Estrategia", "Strategy")}
           htmlFor="strategy"
           className="lg:col-span-2"
           hint={
             strategy && (
               <>
-                Capital inicial <span className="num font-semibold">{capitalFormat.format(strategy.initialCapital)} USDT</span>{" "}
-                · comisión <span className="num font-semibold">{capitalFormat.format(strategy.feePct)} %</span> ·{" "}
+                {t("Capital inicial", "Initial capital")}{" "}
+                <span className="num font-semibold">{capitalFormat.format(strategy.initialCapital)} USDT</span> ·{" "}
+                {t("comisión", "fee")}{" "}
+                <span className="num font-semibold">
+                  {capitalFormat.format(strategy.feePct)}
+                  {t(" %", "%")}
+                </span>{" "}
+                ·{" "}
                 <Link
-                  href={`/strategies/${strategy.id}${isPreset(strategy.id) ? "" : "/edit"}`}
+                  href={href(`/strategies/${strategy.id}${isPreset(strategy.id) ? "" : "/edit"}`)}
                   className="text-primary hover:underline"
                 >
-                  {isPreset(strategy.id) ? "Ver reglas" : "Editar estrategia"}
+                  {isPreset(strategy.id) ? t("Ver reglas", "View rules") : t("Editar estrategia", "Edit strategy")}
                 </Link>
                 {(strategy.recommendedTimeframe || strategy.recommendedRange) && (
                   <span className="mt-1 block">
-                    Recomendado:{" "}
+                    {t("Recomendado:", "Recommended:")}{" "}
                     {strategy.recommendedTimeframe && (
                       <>
-                        temporalidad <span className="num font-semibold">{strategy.recommendedTimeframe}</span>
+                        {t("temporalidad", "timeframe")}{" "}
+                        <span className="num font-semibold">{strategy.recommendedTimeframe}</span>
                       </>
                     )}
                     {strategy.recommendedTimeframe && strategy.recommendedRange && " · "}
                     {strategy.recommendedRange && (
                       <>
-                        periodo <span className="num font-semibold">{strategy.recommendedRange}</span>
+                        {t("periodo", "period")}{" "}
+                        <span className="num font-semibold">{rangePresetLabels[locale][strategy.recommendedRange]}</span>
                       </>
                     )}
                   </span>
@@ -187,11 +199,11 @@ function BacktestConfig({
         <p className="num text-caption text-muted-foreground">
           {valid ? (
             <>
-              <span className="font-semibold text-foreground">{symbol}/USDT</span> · {formatDate(from)} → {formatDate(to)} ·{" "}
-              {timeframe} · ≈ {candleCount.format(candles)} velas
+              <span className="font-semibold text-foreground">{symbol}/USDT</span> · {formatDate(from, locale)} →{" "}
+              {formatDate(to, locale)} · {timeframe} · ≈ {candleCount.format(candles)} {t("velas", "candles")}
             </>
           ) : (
-            "Revisa el rango de fechas."
+            t("Revisa el rango de fechas.", "Check the date range.")
           )}
         </p>
         <Button
@@ -202,7 +214,7 @@ function BacktestConfig({
           onClick={() => setReplayOpen(true)}
         >
           <PlayIcon data-icon="inline-start" />
-          Ejecutar backtest
+          {t("Ejecutar backtest", "Run backtest")}
         </Button>
       </footer>
 
@@ -220,13 +232,17 @@ function BacktestConfig({
 }
 
 function NoStrategies() {
+  const { t, href } = useI18n()
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-border-strong p-4 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-caption text-muted-foreground">
-        Todavía no tienes estrategias. Crea una con sus reglas de compra y venta para poder ejecutar el backtest.
+        {t(
+          "Todavía no tienes estrategias. Crea una con sus reglas de compra y venta para poder ejecutar el backtest.",
+          "You don't have any strategies yet. Create one with its buy and sell rules to run the backtest."
+        )}
       </p>
-      <Link href="/strategies/new" className={buttonVariants({ size: "sm", className: "shrink-0" })}>
-        Crea tu primera estrategia
+      <Link href={href("/strategies/new")} className={buttonVariants({ size: "sm", className: "shrink-0" })}>
+        {t("Crea tu primera estrategia", "Create your first strategy")}
       </Link>
     </div>
   )
@@ -234,6 +250,7 @@ function NoStrategies() {
 
 /** Shown by the mobile action bar when the config can't run yet. */
 function NotRunnable({ reason }: { reason: "no-strategy" | "range" }) {
+  const { t, href } = useI18n()
   return (
     <>
       <header className="flex items-start gap-3 border-b px-4 py-3 md:px-5">
@@ -242,20 +259,23 @@ function NotRunnable({ reason }: { reason: "no-strategy" | "range" }) {
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <DialogTitle className="text-title font-bold">
-            {reason === "no-strategy" ? "Necesitas una estrategia" : "Revisa la configuración"}
+            {reason === "no-strategy" ? t("Necesitas una estrategia", "You need a strategy") : t("Revisa la configuración", "Check the settings")}
           </DialogTitle>
           <DialogDescription className="text-caption text-muted-foreground">
             {reason === "no-strategy"
-              ? "Crea una estrategia para poder ejecutar el backtest."
-              : "El rango de fechas no es válido o es demasiado corto para la temporalidad elegida."}
+              ? t("Crea una estrategia para poder ejecutar el backtest.", "Create a strategy to run the backtest.")
+              : t(
+                  "El rango de fechas no es válido o es demasiado corto para la temporalidad elegida.",
+                  "The date range isn't valid or is too short for the chosen timeframe."
+                )}
           </DialogDescription>
         </div>
         <DialogClose />
       </header>
       {reason === "no-strategy" && (
         <footer className="flex justify-end px-4 py-3 md:px-5">
-          <Link href="/strategies/new" className={buttonVariants()}>
-            Crear estrategia
+          <Link href={href("/strategies/new")} className={buttonVariants()}>
+            {t("Crear estrategia", "Create strategy")}
           </Link>
         </footer>
       )}

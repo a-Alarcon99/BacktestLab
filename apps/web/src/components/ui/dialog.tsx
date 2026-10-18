@@ -3,6 +3,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { XIcon } from "lucide-react"
 import { cn } from "cn"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 
 const Dialog = DialogPrimitive.Root
@@ -29,9 +30,10 @@ function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.
 }
 
 function DialogClose({ className, ...props }: DialogPrimitive.Close.Props) {
+  const { t } = useI18n()
   return (
     <DialogPrimitive.Close
-      aria-label="Cerrar"
+      aria-label={t("Cerrar", "Close")}
       render={<Button variant="ghost" size="icon-sm" className={className} />}
       {...props}
     >
