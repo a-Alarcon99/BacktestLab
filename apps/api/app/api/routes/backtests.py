@@ -9,20 +9,11 @@ from app.core.auth import require_internal_key
 from app.core.config import get_settings
 from app.core.db import get_conn
 from app.schemas.backtest import BacktestRequest, BacktestResult
-from app.services.candles import Timeframe, get_asset_ref, get_candles
+from app.services.candles import TIMEFRAME_SPAN, Timeframe, get_asset_ref, get_candles
 from app.strategies.engine import simulate, to_result, warmup_candles
 from app.strategies.validation import find_conflicts
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
-
-# Upper bound of each candle's duration, to load enough warm-up history before the range.
-TIMEFRAME_SPAN: dict[Timeframe, timedelta] = {
-    "1h": timedelta(hours=1),
-    "4h": timedelta(hours=4),
-    "1d": timedelta(days=1),
-    "1w": timedelta(weeks=1),
-    "1M": timedelta(days=31),
-}
 
 # Earliest date any listed pair can have candles; rejects absurd ranges before any work.
 MIN_DATE = date(2009, 1, 1)

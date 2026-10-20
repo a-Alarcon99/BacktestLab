@@ -5,7 +5,7 @@ import { ChartCandlestickIcon, ChartLineIcon } from "lucide-react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/segmented-control"
-import { fetchCandles, timeframes, type Candle, type Timeframe } from "@/lib/candles"
+import { fetchCandles, isIntraday, timeframes, type Candle, type Timeframe } from "@/lib/candles"
 import { chartTypes, useAssetView } from "./asset-view"
 import { PriceChart } from "./price-chart"
 
@@ -136,7 +136,7 @@ function LivePriceChart({
     <PriceChart
       candles={candles}
       type={chartType}
-      intraday={timeframe === "1h" || timeframe === "4h"}
+      intraday={isIntraday(timeframe)}
       onReachStart={loadOlder}
     />
   )

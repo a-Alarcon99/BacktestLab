@@ -199,11 +199,14 @@ def test_range_checks():
     today = date(2026, 6, 1)
     ok = lambda f, t, tf="1d": check_range(f, t, tf, 100_000, today)
     ok(date(2024, 1, 1), date(2024, 12, 31))
+    ok(date(2026, 4, 1), date(2026, 5, 31), "1m")  # 61 days = 87.8k candles
+    ok(date(2025, 6, 1), date(2026, 5, 31), "15m")
     for f, t, tf in [
         (date(2024, 2, 1), date(2024, 1, 1), "1d"),  # inverted
         (date(1999, 1, 1), date(2024, 1, 1), "1d"),  # before any market
         (date(2024, 1, 1), date(2030, 1, 1), "1d"),  # future
         (date(2010, 1, 1), date(2026, 6, 1), "1h"),  # ~140k 1h candles
+        (date(2026, 1, 1), date(2026, 6, 1), "1m"),  # ~217k 1m candles
     ]:
         with pytest.raises(HTTPException) as e:
             ok(f, t, tf)

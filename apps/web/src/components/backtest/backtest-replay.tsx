@@ -21,7 +21,7 @@ import {
   type BacktestRequest,
   type BacktestResult,
 } from "@/lib/backtests"
-import { estimateCandles } from "@/lib/candles"
+import { estimateCandles, isIntraday } from "@/lib/candles"
 import { formatDate, formatPrice } from "@/lib/format"
 import { intlLocale, type Locale } from "@/lib/i18n"
 import { replayDuration } from "@/lib/replay"
@@ -234,7 +234,7 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
       bg: color("--background"),
     }
     const font = `11px ${getComputedStyle(canvas).fontFamily}`
-    const intraday = run.timeframe === "1h" || run.timeframe === "4h"
+    const intraday = isIntraday(run.timeframe)
     const dateFormat = intraday ? f.axisDateTime : f.axisDate
 
     let raf = 0
@@ -546,7 +546,7 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
             <TradeTooltip
               trade={result.trades[hover.n]}
               rules={run.strategy.rules}
-              intraday={run.timeframe === "1h" || run.timeframe === "4h"}
+              intraday={isIntraday(run.timeframe)}
               x={hover.x}
               y={hover.y}
             />

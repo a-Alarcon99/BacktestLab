@@ -13,7 +13,10 @@ import { useAssetView } from "@/components/market/asset-view"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import {
   defaultTimeframe,
+  earliestFrom,
   estimateCandles,
+  maxBacktestCandles,
+  rangeFits,
   presetFrom,
   rangePresetLabels,
   rangePresets,
@@ -60,7 +63,21 @@ function BacktestConfig({
     strategies?.find((s) => s.id === strategyId) ?? strategies?.find((s) => !isPreset(s.id)) ?? strategies?.[0]
   const valid = from !== "" && to !== "" && from <= to && from >= historySince && to <= today
   const candles = valid ? estimateCandles(from, to, timeframe) : 0
-  const rangeOk = valid && candles >= 2
+  const rangeOk = valid && candles >= 2 && candles <= maxBacktestCandles
+  // Short timeframes cover few days per backtest: longer presets can't be chosen.
+  const tooLongPresets = rangePresets.filter(
+    (p) => !rangeFits(presetFrom(p, today, historySince), today, timeframe)
+  )
+
+  function changeTimeframe(next: Timeframe) {
+    setTimeframe(next)
+    if (valid && !rangeFits(from, to, next)) {
+      // Keep the end of the range and cut its start to what a backtest of this timeframe allows.
+      const earliest = earliestFrom(to, next)
+      setFrom(earliest > historySince ? earliest : historySince)
+      setPreset(null)
+    }
+  }
 
   // Stable while the inputs don't change: a new object would start a new run.
   const run = useMemo<ReplayRun | null>(
@@ -81,6 +98,7 @@ function BacktestConfig({
             label={t("Rango predefinido", "Preset range")}
             options={rangePresets}
             labels={rangePresetLabels[locale]}
+            disabled={tooLongPresets}
             value={preset ?? ("" as RangePreset)}
             onValueChange={(next) => {
               setPreset(next)
@@ -126,7 +144,7 @@ function BacktestConfig({
             label={t("Temporalidad", "Timeframe")}
             options={timeframes}
             value={timeframe}
-            onValueChange={setTimeframe}
+            onValueChange={changeTimeframe}
             className="w-full"
           />
         </Field>
@@ -205,6 +223,14 @@ function BacktestConfig({
           ) : (
             t("Revisa el rango de fechas.", "Check the date range.")
           )}
+          {valid && candles > maxBacktestCandles && (
+            <span className="block text-destructive">
+              {t(
+                `Máximo ${candleCount.format(maxBacktestCandles)} velas por backtest: acorta el rango o usa una temporalidad mayor.`,
+                `At most ${candleCount.format(maxBacktestCandles)} candles per backtest: shorten the range or use a longer timeframe.`
+              )}
+            </span>
+          )}
         </p>
         <Button
           size="lg"
@@ -265,8 +291,8 @@ function NotRunnable({ reason }: { reason: "no-strategy" | "range" }) {
             {reason === "no-strategy"
               ? t("Crea una estrategia para poder ejecutar el backtest.", "Create a strategy to run the backtest.")
               : t(
-                  "El rango de fechas no es válido o es demasiado corto para la temporalidad elegida.",
-                  "The date range isn't valid or is too short for the chosen timeframe."
+                  "El rango de fechas no es válido, o es demasiado corto o largo para la temporalidad elegida.",
+                  "The date range isn't valid, or it is too short or too long for the chosen timeframe."
                 )}
           </DialogDescription>
         </div>

@@ -92,7 +92,7 @@ def test_iter_klines_pages_through_the_1000_limit(mock_http):
     end = start + timedelta(hours=2_499)  # 2,500 candles -> 1000 + 1000 + 500
     requests = mock_http(_fake_binance_klines(start, end))
 
-    pages = list(market_data.iter_klines_1h("BTCUSDT", start, end))
+    pages = list(market_data.iter_klines("BTCUSDT", "1h", timedelta(hours=1), start, end))
 
     assert [len(p) for p in pages] == [1000, 1000, 500]
     times = [k.open_time for page in pages for k in page]
@@ -116,7 +116,7 @@ def test_ip_ban_is_not_retried_and_skips_the_host_until_it_ends(mock_http, monke
     start = datetime(2024, 1, 1, tzinfo=UTC)
 
     with pytest.raises(httpx.HTTPStatusError):
-        market_data.fetch_klines_1h("BTCUSDT", start, start)
+        market_data.fetch_klines("BTCUSDT", "1h", start, start)
     assert len(requests) == 1  # retrying during a ban makes Binance extend it
 
     with pytest.raises(market_data.ProviderBannedError):
@@ -125,7 +125,7 @@ def test_ip_ban_is_not_retried_and_skips_the_host_until_it_ends(mock_http, monke
 
     clock[0] += 121
     with pytest.raises(httpx.HTTPStatusError):
-        market_data.fetch_klines_1h("BTCUSDT", start, start)
+        market_data.fetch_klines("BTCUSDT", "1h", start, start)
     assert len(requests) == 2
 
 
@@ -135,7 +135,11 @@ def test_iter_klines_fails_when_a_page_does_not_advance(mock_http):
     requests = mock_http(lambda _: httpx.Response(200, json=stale))
 
     with pytest.raises(httpx.HTTPError):
-        list(market_data.iter_klines_1h("BTCUSDT", start, start + timedelta(hours=5)))
+        list(
+            market_data.iter_klines(
+                "BTCUSDT", "1h", timedelta(hours=1), start, start + timedelta(hours=5)
+            )
+        )
     assert len(requests) == 1
 
 
@@ -150,7 +154,7 @@ def test_iter_klines_request_count_is_bounded_by_the_range(mock_http):
     requests = mock_http(one_candle_per_page)
 
     with pytest.raises(httpx.HTTPError):
-        list(market_data.iter_klines_1h("BTCUSDT", start, end))
+        list(market_data.iter_klines("BTCUSDT", "1h", timedelta(hours=1), start, end))
     assert len(requests) == 4  # 2,500 candles need 3 pages of 1000, plus one of slack
 
 
@@ -159,5 +163,12 @@ def test_iter_klines_stops_when_binance_has_no_data(mock_http):
     start = datetime(2026, 1, 1, tzinfo=UTC)
     requests = mock_http(_fake_binance_klines(listed, listed - timedelta(hours=1)))  # nothing
 
-    assert list(market_data.iter_klines_1h("BTCUSDT", start, start + timedelta(hours=3))) == []
+    assert (
+        list(
+            market_data.iter_klines(
+                "BTCUSDT", "1h", timedelta(hours=1), start, start + timedelta(hours=3)
+            )
+        )
+        == []
+    )
     assert len(requests) == 1

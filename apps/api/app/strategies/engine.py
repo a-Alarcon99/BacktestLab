@@ -27,7 +27,13 @@ from app.services.candles import InvalidRangeError, Timeframe
 from app.strategies.conditions import entry_change_matches, spec
 
 PERIODS_PER_YEAR: dict[Timeframe, int] = {
+    "1m": 1440 * 365,
+    "3m": 480 * 365,
+    "5m": 288 * 365,
+    "15m": 96 * 365,
+    "30m": 48 * 365,
     "1h": 24 * 365,
+    "2h": 12 * 365,
     "4h": 6 * 365,
     "1d": 365,
     "1w": 52,

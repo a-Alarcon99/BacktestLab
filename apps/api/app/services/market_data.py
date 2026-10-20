@@ -159,13 +159,13 @@ def fetch_market_caps(coingecko_ids: list[str]) -> dict[str, MarketCap]:
     return {c["id"]: MarketCap(c.get("market_cap"), c.get("market_cap_rank")) for c in data}
 
 
-def fetch_klines_1h(symbol: str, start: datetime, end: datetime) -> list[Kline]:
-    """One page (up to 1000) of 1h candles with open_time in [start, end]."""
+def fetch_klines(symbol: str, interval: str, start: datetime, end: datetime) -> list[Kline]:
+    """One page (up to 1000) of candles of `interval` with open_time in [start, end]."""
     data = _binance(
         "/api/v3/klines",
         {
             "symbol": symbol,
-            "interval": "1h",
+            "interval": interval,
             "startTime": int(start.timestamp() * 1000),
             "endTime": int(end.timestamp() * 1000),
             "limit": BINANCE_KLINE_LIMIT,
@@ -184,24 +184,26 @@ def fetch_klines_1h(symbol: str, start: datetime, end: datetime) -> list[Kline]:
     ]
 
 
-def iter_klines_1h(symbol: str, start: datetime, end: datetime) -> Iterator[list[Kline]]:
-    """Pages through Binance's 1000-candle limit: each page starts one hour after the last one.
+def iter_klines(
+    symbol: str, interval: str, step: timedelta, start: datetime, end: datetime
+) -> Iterator[list[Kline]]:
+    """Pages through Binance's 1000-candle limit: each page starts one `step` after the last one.
 
     Bounded: never more requests than the range can need (plus one), and a page that doesn't move
     the cursor forward is an error, so a misbehaving provider can't keep it asking for the same
     page. Both cases raise instead of stopping early: a partial download could leave a hole in the
-    stored range, which must stay contiguous.
+    stored data.
     """
-    hours = int((end - start) / timedelta(hours=1)) + 1
-    max_requests = -(-hours // BINANCE_KLINE_LIMIT) + 1
+    count = int((end - start) / step) + 1
+    max_requests = -(-count // BINANCE_KLINE_LIMIT) + 1
     cursor = start
     for _ in range(max_requests):
         if cursor > end:
             return
-        page = fetch_klines_1h(symbol, cursor, end)
+        page = fetch_klines(symbol, interval, cursor, end)
         if not page:
             return
-        next_cursor = page[-1].open_time + timedelta(hours=1)
+        next_cursor = page[-1].open_time + step
         if next_cursor <= cursor:
             raise httpx.HTTPError(f"Binance returned no newer candles for {symbol} after {cursor}")
         yield page
