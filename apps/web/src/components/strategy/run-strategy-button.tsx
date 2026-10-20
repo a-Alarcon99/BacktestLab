@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { FlaskConicalIcon, PlayIcon } from "lucide-react"
 import { ReplayPlayer, type ReplayRun } from "@/components/backtest/backtest-replay"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Field, Input, Select } from "@/components/ui/input"
@@ -11,17 +12,16 @@ import {
   defaultTimeframe,
   estimateCandles,
   presetFrom,
+  rangePresetLabels,
   rangePresets,
   timeframes,
   type RangePreset,
   type Timeframe,
 } from "@/lib/candles"
-import { formatDate } from "@/lib/format"
+import { formatDate, numberFormat } from "@/lib/format"
 import type { Strategy } from "@/lib/strategy"
 
 export type RunnableAsset = { symbol: string; name: string; historySince: string }
-
-const candleCount = new Intl.NumberFormat("es-ES", { useGrouping: "always" })
 
 /**
  * "Ejecutar backtest" button of a strategy card. Opens a pop-up in two steps:
@@ -38,6 +38,8 @@ function RunStrategyButton({
 }) {
   const [open, setOpen] = useState(false)
   const [run, setRun] = useState<ReplayRun | null>(null)
+  const { locale, t } = useI18n()
+  const candleCount = numberFormat(locale, { useGrouping: "always" })
 
   const [symbol, setSymbol] = useState(assets[0].symbol)
   const [timeframe, setTimeframe] = useState<Timeframe>(defaultTimeframe)
@@ -58,7 +60,7 @@ function RunStrategyButton({
     <>
       <Button size="sm" onClick={openDialog} aria-haspopup="dialog">
         <PlayIcon data-icon="inline-start" />
-        Ejecutar backtest
+        {t("Ejecutar backtest", "Run backtest")}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -74,14 +76,14 @@ function RunStrategyButton({
                 <div className="flex min-w-0 flex-1 flex-col">
                   <DialogTitle className="truncate text-title font-bold">{strategy.name}</DialogTitle>
                   <DialogDescription className="text-caption text-muted-foreground">
-                    Elige dónde y cuándo probar la estrategia.
+                    {t("Elige dónde y cuándo probar la estrategia.", "Choose where and when to test the strategy.")}
                   </DialogDescription>
                 </div>
                 <DialogClose />
               </header>
 
               <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-4 md:px-5">
-                <Field label="Activo" htmlFor="run-asset">
+                <Field label={t("Activo", "Asset")} htmlFor="run-asset">
                   <Select
                     id="run-asset"
                     value={symbol}
@@ -100,10 +102,11 @@ function RunStrategyButton({
                   </Select>
                 </Field>
 
-                <Field label="Periodo de tiempo">
+                <Field label={t("Periodo de tiempo", "Time period")}>
                   <SegmentedControl
-                    label="Rango predefinido"
+                    label={t("Rango predefinido", "Preset range")}
                     options={rangePresets}
+                    labels={rangePresetLabels[locale]}
                     value={preset}
                     onValueChange={(next) => {
                       setPreset(next)
@@ -114,7 +117,7 @@ function RunStrategyButton({
                     className="self-start"
                   />
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Desde" htmlFor="run-from">
+                    <Field label={t("Desde", "From")} htmlFor="run-from">
                       <Input
                         id="run-from"
                         type="date"
@@ -124,7 +127,7 @@ function RunStrategyButton({
                         onChange={(event) => setFrom(event.target.value)}
                       />
                     </Field>
-                    <Field label="Hasta" htmlFor="run-to">
+                    <Field label={t("Hasta", "To")} htmlFor="run-to">
                       <Input
                         id="run-to"
                         type="date"
@@ -136,13 +139,14 @@ function RunStrategyButton({
                     </Field>
                   </div>
                   <p className="text-caption text-muted-foreground">
-                    Histórico disponible desde <span className="num font-semibold">{formatDate(historySince)}</span>
+                    {t("Histórico disponible desde", "History available since")}{" "}
+                    <span className="num font-semibold">{formatDate(historySince, locale)}</span>
                   </p>
                 </Field>
 
-                <Field label="Temporalidad de las velas">
+                <Field label={t("Temporalidad de las velas", "Candle timeframe")}>
                   <SegmentedControl
-                    label="Temporalidad"
+                    label={t("Temporalidad", "Timeframe")}
                     options={timeframes}
                     value={timeframe}
                     onValueChange={setTimeframe}
@@ -156,10 +160,10 @@ function RunStrategyButton({
                   {valid ? (
                     <>
                       <span className="font-semibold text-foreground">{symbol}/USDT</span> · {timeframe} · ≈{" "}
-                      {candleCount.format(candles)} velas
+                      {candleCount.format(candles)} {t("velas", "candles")}
                     </>
                   ) : (
-                    "Revisa el rango de fechas."
+                    t("Revisa el rango de fechas.", "Check the date range.")
                   )}
                 </p>
                 <Button
@@ -168,7 +172,7 @@ function RunStrategyButton({
                   onClick={() => setRun({ symbol, strategy, timeframe, from, to, mode: "new" })}
                 >
                   <PlayIcon data-icon="inline-start" />
-                  Ejecutar backtest
+                  {t("Ejecutar backtest", "Run backtest")}
                 </Button>
               </footer>
             </>

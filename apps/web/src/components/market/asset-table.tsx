@@ -2,7 +2,8 @@ import Link from "next/link"
 import { ArrowDownIcon, FlaskConicalIcon } from "lucide-react"
 import { cn } from "cn"
 import { buttonVariants } from "@/components/ui/button"
-import { formatCompact, formatDate, formatPrice } from "@/lib/format"
+import { Money } from "@/components/currency/currency-provider"
+import { formatDate } from "@/lib/format"
 import type { Asset } from "@/lib/market"
 import { AssetAvatar } from "./asset-avatar"
 import { PriceChange } from "./price-change"
@@ -68,7 +69,7 @@ function AssetTable({ assets, sparklines }: { assets: Asset[]; sparklines?: Reco
                   </Link>
                 </td>
                 <td className="num px-3 py-4 text-right font-semibold whitespace-nowrap">
-                  {formatPrice(asset.price)}
+                  <Money value={asset.price} />
                 </td>
                 <td className="px-3 py-4 text-right">
                   <PriceChange value={asset.change24h} />
@@ -77,10 +78,10 @@ function AssetTable({ assets, sparklines }: { assets: Asset[]; sparklines?: Reco
                   <PriceChange value={asset.change7d} />
                 </td>
                 <td className="num hidden px-3 py-4 text-right whitespace-nowrap md:table-cell">
-                  {formatCompact(asset.volume24h)}
+                  <Money value={asset.volume24h} compact />
                 </td>
                 <td className="num hidden px-3 py-4 text-right whitespace-nowrap md:table-cell">
-                  {asset.marketCap === null ? "—" : formatCompact(asset.marketCap)}
+                  {asset.marketCap === null ? "—" : <Money value={asset.marketCap} compact />}
                 </td>
                 <td className="num hidden px-3 py-4 text-right whitespace-nowrap text-muted-foreground xl:table-cell">
                   {formatDate(asset.historySince)}

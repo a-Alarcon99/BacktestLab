@@ -1,5 +1,6 @@
 import type { RangePreset, Timeframe } from "@/lib/candles"
 import { patternById, type PatternId } from "@/lib/candle-patterns"
+import { defaultLocale, intlLocale, translator, type Locale, type Text, type Translate } from "@/lib/i18n"
 
 // Strategy model shared by the form, the list and the backtest request. Mirrors the API's
 // `app/schemas/backtest.py`; contradiction rules mirror `app/strategies/validation.py`.
@@ -68,8 +69,11 @@ export const MAX_CONDITIONS = 3
 export const DEFAULT_CAPITAL = 10_000
 export const DEFAULT_FEE_PCT = 0.1
 
-const decimal = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
-const n = (value: number) => decimal.format(value)
+const decimals: Record<Locale, Intl.NumberFormat> = {
+  es: new Intl.NumberFormat(intlLocale.es, { maximumFractionDigits: 2 }),
+  en: new Intl.NumberFormat(intlLocale.en, { maximumFractionDigits: 2 }),
+}
+const num = (l: Locale, value: number) => decimals[l].format(value)
 
 type Interval = { type: "interval"; lo: number; hi: number }
 type Choice = { type: "choice"; value: string }
@@ -79,24 +83,35 @@ const interval = (lo: number, hi: number): Interval => ({ type: "interval", lo, 
 const choice = (value: string): Choice => ({ type: "choice", value })
 const threshold = (op: Op, value: number) => (op === "above" ? interval(value, Infinity) : interval(-Infinity, value))
 
+// Every text-producing function takes the UI language (`l`, Spanish by default).
 type ConditionSpec<C extends Condition> = {
   /** Name in the condition picker. */
-  name: string
+  name: Text
   family: RuleKind
   defaults: (side: RuleSide) => C
-  describe: (c: C) => string
+  describe: (c: C, l?: Locale) => string
   /** What the condition looks at: same subject = comparable (see `findConflicts`). */
-  subject: (c: C) => { key: string; label: string }
+  subject: (c: C, l?: Locale) => { key: string; label: string }
   constraint: (c: C) => Constraint
   /** Per-field errors, keyed by field name. */
-  validate: (c: C) => Record<string, string>
+  validate: (c: C, l?: Locale) => Record<string, string>
 }
 
-const periodError = (value: number) =>
-  Number.isInteger(value) && value >= 2 && value <= 200 ? undefined : "Entero entre 2 y 200"
+const periodError = (t: Translate, value: number) =>
+  Number.isInteger(value) && value >= 2 && value <= 200 ? undefined : t("Entero entre 2 y 200", "Whole number from 2 to 200")
+
+const slowError = (t: Translate, fast: number, slow: number) =>
+  periodError(t, slow) ?? (fast >= slow && t("Debe ser mayor que la rápida", "Must be greater than the fast one"))
 
 function errors(entries: Record<string, string | undefined | false>) {
   return Object.fromEntries(Object.entries(entries).filter(([, v]) => v)) as Record<string, string>
+}
+
+/** Labels of the periodic condition's frequencies (also its picker options). */
+export const periodicLabel: Record<"day" | "week" | "month", Text> = {
+  day: { es: "Cada día", en: "Every day" },
+  week: { es: "Cada semana (lunes)", en: "Every week (Monday)" },
+  month: { es: "Cada mes (día 1)", en: "Every month (1st)" },
 }
 
 /**
@@ -105,121 +120,179 @@ function errors(entries: Record<string, string | undefined | false>) {
  */
 export const conditionSpecs: { [K in ConditionKind]: ConditionSpec<ConditionOf<K>> } = {
   rsi: {
-    name: "RSI",
+    name: { es: "RSI", en: "RSI" },
     family: "indicator",
     defaults: (side) => ({ kind: "rsi", period: 14, op: side === "buy" ? "below" : "above", value: side === "buy" ? 30 : 70 }),
-    describe: (c) => `RSI (${c.period}) ${c.op === "above" ? "por encima de" : "por debajo de"} ${n(c.value)}`,
+    describe: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return `RSI (${c.period}) ${c.op === "above" ? t("por encima de", "above") : t("por debajo de", "below")} ${num(l, c.value)}`
+    },
     subject: (c) => ({ key: `rsi:${c.period}`, label: `RSI (${c.period})` }),
     constraint: (c) => threshold(c.op, c.value),
-    validate: (c) =>
-      errors({ period: periodError(c.period), value: !(c.value > 0 && c.value < 100) && "Entre 0 y 100" }),
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({ period: periodError(t, c.period), value: !(c.value > 0 && c.value < 100) && t("Entre 0 y 100", "Between 0 and 100") })
+    },
   },
   "ma-cross": {
-    name: "Cruce de medias",
+    name: { es: "Cruce de medias", en: "Moving average cross" },
     family: "indicator",
     defaults: (side) => ({ kind: "ma-cross", ma: "sma", fast: 20, slow: 50, direction: side === "buy" ? "up" : "down" }),
-    describe: (c) =>
-      `${c.ma.toUpperCase()} ${c.fast} cruza ${c.direction === "up" ? "al alza" : "a la baja"} la ${c.ma.toUpperCase()} ${c.slow}`,
-    subject: (c) => ({ key: `${c.ma}-cross:${c.fast}:${c.slow}`, label: `cruce ${c.ma.toUpperCase()} ${c.fast}/${c.slow}` }),
+    describe: (c, l = defaultLocale) => {
+      const ma = c.ma.toUpperCase()
+      return l === "en"
+        ? `${ma} ${c.fast} crosses ${c.direction === "up" ? "above" : "below"} the ${ma} ${c.slow}`
+        : `${ma} ${c.fast} cruza ${c.direction === "up" ? "al alza" : "a la baja"} la ${ma} ${c.slow}`
+    },
+    subject: (c, l = defaultLocale) => ({
+      key: `${c.ma}-cross:${c.fast}:${c.slow}`,
+      label: `${translator(l)("cruce", "the cross")} ${c.ma.toUpperCase()} ${c.fast}/${c.slow}`,
+    }),
     constraint: (c) => choice(c.direction),
-    validate: (c) =>
-      errors({
-        fast: periodError(c.fast),
-        slow: periodError(c.slow) ?? (c.fast >= c.slow && "Debe ser mayor que la rápida"),
-      }),
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({ fast: periodError(t, c.fast), slow: slowError(t, c.fast, c.slow) })
+    },
   },
   macd: {
-    name: "MACD",
+    name: { es: "MACD", en: "MACD" },
     family: "indicator",
     defaults: (side) => ({ kind: "macd", fast: 12, slow: 26, signal: 9, direction: side === "buy" ? "up" : "down" }),
-    describe: (c) =>
-      `MACD (${c.fast}, ${c.slow}, ${c.signal}) cruza ${c.direction === "up" ? "al alza" : "a la baja"} su señal`,
+    describe: (c, l = defaultLocale) =>
+      l === "en"
+        ? `MACD (${c.fast}, ${c.slow}, ${c.signal}) crosses ${c.direction === "up" ? "above" : "below"} its signal`
+        : `MACD (${c.fast}, ${c.slow}, ${c.signal}) cruza ${c.direction === "up" ? "al alza" : "a la baja"} su señal`,
     subject: (c) => ({ key: `macd:${c.fast}:${c.slow}:${c.signal}`, label: `MACD (${c.fast}, ${c.slow}, ${c.signal})` }),
     constraint: (c) => choice(c.direction),
-    validate: (c) =>
-      errors({
-        fast: periodError(c.fast),
-        slow: periodError(c.slow) ?? (c.fast >= c.slow && "Debe ser mayor que la rápida"),
-        signal: periodError(c.signal),
-      }),
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({ fast: periodError(t, c.fast), slow: slowError(t, c.fast, c.slow), signal: periodError(t, c.signal) })
+    },
   },
   bollinger: {
-    name: "Bandas de Bollinger",
+    name: { es: "Bandas de Bollinger", en: "Bollinger Bands" },
     family: "indicator",
     defaults: (side) => ({ kind: "bollinger", period: 20, stdDev: 2, band: side === "buy" ? "lower" : "upper" }),
-    describe: (c) =>
-      `Cierre ${c.band === "upper" ? "por encima de la banda superior" : "por debajo de la banda inferior"} de Bollinger (${c.period}, ${n(c.stdDev)})`,
-    subject: (c) => ({ key: `bollinger:${c.period}:${c.stdDev}`, label: `Bollinger (${c.period}, ${n(c.stdDev)})` }),
+    describe: (c, l = defaultLocale) =>
+      l === "en"
+        ? `Close ${c.band === "upper" ? "above the upper" : "below the lower"} Bollinger Band (${c.period}, ${num(l, c.stdDev)})`
+        : `Cierre ${c.band === "upper" ? "por encima de la banda superior" : "por debajo de la banda inferior"} de Bollinger (${c.period}, ${num(l, c.stdDev)})`,
+    subject: (c, l = defaultLocale) => ({
+      key: `bollinger:${c.period}:${c.stdDev}`,
+      label: `Bollinger (${c.period}, ${num(l, c.stdDev)})`,
+    }),
     constraint: (c) => choice(c.band),
-    validate: (c) =>
-      errors({ period: periodError(c.period), stdDev: !(c.stdDev >= 0.5 && c.stdDev <= 5) && "Entre 0,5 y 5" }),
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({
+        period: periodError(t, c.period),
+        stdDev: !(c.stdDev >= 0.5 && c.stdDev <= 5) && t("Entre 0,5 y 5", "Between 0.5 and 5"),
+      })
+    },
   },
   donchian: {
-    name: "Canal Donchian",
+    name: { es: "Canal Donchian", en: "Donchian Channel" },
     family: "indicator",
     defaults: (side) => ({ kind: "donchian", period: 20, direction: side === "buy" ? "up" : "down" }),
-    describe: (c) =>
-      `El cierre rompe el ${c.direction === "up" ? "máximo" : "mínimo"} de las últimas ${c.period} velas`,
+    describe: (c, l = defaultLocale) =>
+      l === "en"
+        ? `Close breaks the ${c.direction === "up" ? "high" : "low"} of the last ${c.period} candles`
+        : `El cierre rompe el ${c.direction === "up" ? "máximo" : "mínimo"} de las últimas ${c.period} velas`,
     subject: (c) => ({ key: `donchian:${c.period}`, label: `Donchian (${c.period})` }),
     constraint: (c) => choice(c.direction),
-    validate: (c) => errors({ period: periodError(c.period) }),
+    validate: (c, l = defaultLocale) => errors({ period: periodError(translator(l), c.period) }),
   },
   "price-change": {
-    name: "Variación de precio",
+    name: { es: "Variación de precio", en: "Price change" },
     family: "price",
     defaults: (side) =>
       side === "buy"
         ? { kind: "price-change", direction: "down", pct: 5, lookback: 24 }
         : { kind: "price-change", direction: "up", pct: 10, lookback: "entry" },
-    describe: (c) =>
-      `El precio ${c.direction === "up" ? "sube" : "cae"} más de un ${n(c.pct)} % ${
-        c.lookback === "entry" ? "desde la compra" : `en ${c.lookback} ${c.lookback === 1 ? "vela" : "velas"}`
-      }`,
-    subject: (c) => ({
-      key: `price-change:${c.lookback}`,
-      label: c.lookback === "entry" ? "el precio desde la compra" : `el precio en ${c.lookback} velas`,
-    }),
+    describe: (c, l = defaultLocale) => {
+      const pct = num(l, c.pct)
+      if (l === "en") {
+        const window = c.lookback === "entry" ? "since the buy" : `in ${c.lookback} ${c.lookback === 1 ? "candle" : "candles"}`
+        return `Price ${c.direction === "up" ? "rises" : "falls"} more than ${pct}% ${window}`
+      }
+      const window = c.lookback === "entry" ? "desde la compra" : `en ${c.lookback} ${c.lookback === 1 ? "vela" : "velas"}`
+      return `El precio ${c.direction === "up" ? "sube" : "cae"} más de un ${pct} % ${window}`
+    },
+    subject: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return {
+        key: `price-change:${c.lookback}`,
+        label:
+          c.lookback === "entry"
+            ? t("el precio desde la compra", "the price since the buy")
+            : t(`el precio en ${c.lookback} velas`, `the price over ${c.lookback} candles`),
+      }
+    },
     constraint: (c) => (c.direction === "up" ? interval(c.pct, Infinity) : interval(-Infinity, -c.pct)),
-    validate: (c) =>
-      errors({
-        pct: !(c.pct > 0 && c.pct <= 1000) && "Entre 0 y 1000",
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({
+        pct: !(c.pct > 0 && c.pct <= 1000) && t("Entre 0 y 1000", "Between 0 and 1000"),
         lookback:
           c.lookback !== "entry" &&
           !(Number.isInteger(c.lookback) && c.lookback >= 1 && c.lookback <= 200) &&
-          "Entero entre 1 y 200",
-      }),
+          t("Entero entre 1 y 200", "Whole number from 1 to 200"),
+      })
+    },
   },
   volume: {
-    name: "Volumen",
+    name: { es: "Volumen", en: "Volume" },
     family: "volume",
     defaults: () => ({ kind: "volume", op: "above", multiple: 1.5, period: 20 }),
-    describe: (c) =>
-      `Volumen ${c.op === "above" ? "por encima de" : "por debajo de"} ${n(c.multiple)}× su media de ${c.period} velas`,
-    subject: (c) => ({ key: `volume:${c.period}`, label: `el volumen (media ${c.period})` }),
+    describe: (c, l = defaultLocale) =>
+      l === "en"
+        ? `Volume ${c.op === "above" ? "above" : "below"} ${num(l, c.multiple)}× its ${c.period}-candle average`
+        : `Volumen ${c.op === "above" ? "por encima de" : "por debajo de"} ${num(l, c.multiple)}× su media de ${c.period} velas`,
+    subject: (c, l = defaultLocale) => ({
+      key: `volume:${c.period}`,
+      label: translator(l)(`el volumen (media ${c.period})`, `the volume (${c.period} average)`),
+    }),
     constraint: (c) => threshold(c.op, c.multiple),
-    validate: (c) =>
-      errors({ multiple: !(c.multiple > 0 && c.multiple <= 100) && "Entre 0 y 100", period: periodError(c.period) }),
+    validate: (c, l = defaultLocale) => {
+      const t = translator(l)
+      return errors({
+        multiple: !(c.multiple > 0 && c.multiple <= 100) && t("Entre 0 y 100", "Between 0 and 100"),
+        period: periodError(t, c.period),
+      })
+    },
   },
   periodic: {
-    name: "Periódica",
+    name: { es: "Periódica", en: "Periodic" },
     family: "periodic",
     defaults: () => ({ kind: "periodic", every: "week" }),
-    describe: (c) => ({ day: "Cada día", week: "Cada semana (lunes)", month: "Cada mes (día 1)" })[c.every],
-    subject: (c) => ({ key: `periodic:${c.every}`, label: "la misma frecuencia" }),
+    describe: (c, l = defaultLocale) => periodicLabel[c.every][l],
+    subject: (c, l = defaultLocale) => ({
+      key: `periodic:${c.every}`,
+      label: translator(l)("la misma frecuencia", "the same frequency"),
+    }),
     constraint: () => choice("on"),
     validate: () => ({}),
   },
   "candle-pattern": {
-    name: "Patrón de velas",
+    name: { es: "Patrón de velas", en: "Candlestick pattern" },
     family: "pattern",
     defaults: (side) => ({ kind: "candle-pattern", pattern: side === "buy" ? "hammer" : "shooting-star" }),
-    describe: (c) =>
-      `Se forma el patrón ${patternById[c.pattern].name} (${patternById[c.pattern].bias === "bullish" ? "alcista" : "bajista"})`,
+    describe: (c, l = defaultLocale) => {
+      const pattern = patternById[c.pattern]
+      const bullish = pattern.bias === "bullish"
+      return l === "en"
+        ? `${pattern.name.en} pattern forms (${bullish ? "bullish" : "bearish"})`
+        : `Se forma el patrón ${pattern.name.es} (${bullish ? "alcista" : "bajista"})`
+    },
     // One subject per pattern: different patterns may co-occur, the same one in a buy and a sell
     // rule would fire together.
-    subject: (c) => ({ key: `candle-pattern:${c.pattern}`, label: `el patrón ${patternById[c.pattern].name}` }),
+    subject: (c, l = defaultLocale) => ({
+      key: `candle-pattern:${c.pattern}`,
+      label: translator(l)(`el patrón ${patternById[c.pattern].name.es}`, `the ${patternById[c.pattern].name.en} pattern`),
+    }),
     constraint: () => choice("on"),
-    validate: (c) => errors({ pattern: !(c.pattern in patternById) && "Elige un patrón" }),
+    validate: (c, l = defaultLocale) =>
+      errors({ pattern: !(c.pattern in patternById) && translator(l)("Elige un patrón", "Pick a pattern") }),
   },
 }
 
@@ -246,16 +319,27 @@ export function newRule(side: RuleSide, family: RuleKind): Rule {
   }
 }
 
-export function describeSize(rule: Rule) {
-  if (rule.side === "sell") return `vender ${n(rule.size.value)} % de la posición`
-  return rule.size.unit === "usdt" ? `comprar ${n(rule.size.value)} USDT` : `comprar ${n(rule.size.value)} % del efectivo`
+export function describeSize(rule: Rule, l: Locale = defaultLocale) {
+  const value = num(l, rule.size.value)
+  if (l === "en") {
+    if (rule.side === "sell") return `sell ${value}% of the position`
+    return rule.size.unit === "usdt" ? `buy ${value} USDT` : `buy ${value}% of the cash`
+  }
+  if (rule.side === "sell") return `vender ${value} % de la posición`
+  return rule.size.unit === "usdt" ? `comprar ${value} USDT` : `comprar ${value} % del efectivo`
+}
+
+/** Conditions of a rule joined with "y" / "and" (only the first one capitalized). */
+export function describeConditions(rule: Rule, l: Locale = defaultLocale) {
+  return rule.conditions
+    .map((c) => specOf(c).describe(c, l))
+    .map((c, i) => (i === 0 ? c : c.charAt(0).toLowerCase() + c.slice(1)))
+    .join(translator(l)(" y ", " and "))
 }
 
 /** Human-readable rule: "RSI (14) por debajo de 30 y … → comprar 50 % del efectivo". */
-export function describeRule(rule: Rule) {
-  const conditions = rule.conditions.map((c) => specOf(c).describe(c))
-  const text = conditions.map((c, i) => (i === 0 ? c : c.charAt(0).toLowerCase() + c.slice(1))).join(" y ")
-  return `${text} → ${describeSize(rule)}`
+export function describeRule(rule: Rule, l: Locale = defaultLocale) {
+  return `${describeConditions(rule, l)} → ${describeSize(rule, l)}`
 }
 
 /** UI family of a rule (that of its first condition), for icons. */
@@ -284,11 +368,16 @@ function intersect(a: Interval, b: Interval) {
 
 const isEmpty = (i: Interval) => i.lo >= i.hi
 
-function merge(rule: Rule, name: string, conflicts: Conflict[]): MergedRule {
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+function merge(rule: Rule, name: string, conflicts: Conflict[], l: Locale): MergedRule {
+  const t = translator(l)
+  const opposite = (label: string) =>
+    t(`La ${name} tiene condiciones opuestas sobre ${label}.`, `${cap(name)} has opposite conditions on ${label}.`)
   const merged: MergedRule = { rule, name, constraints: new Map(), labels: new Map(), valid: true }
   for (const condition of rule.conditions) {
     const spec = specOf(condition)
-    const { key, label } = spec.subject(condition)
+    const { key, label } = spec.subject(condition, l)
     const constraint = spec.constraint(condition)
     const previous = merged.constraints.get(key)
     merged.labels.set(key, label)
@@ -296,17 +385,20 @@ function merge(rule: Rule, name: string, conflicts: Conflict[]): MergedRule {
       merged.constraints.set(key, constraint)
     } else if (sameConstraint(previous, constraint)) {
       merged.valid = false
-      conflicts.push({ ruleIds: [rule.id], message: `La ${name} repite la condición sobre ${label}.` })
+      conflicts.push({
+        ruleIds: [rule.id],
+        message: t(`La ${name} repite la condición sobre ${label}.`, `${cap(name)} repeats the condition on ${label}.`),
+      })
     } else if (previous.type === "interval" && constraint.type === "interval") {
       const both = intersect(previous, constraint)
       merged.constraints.set(key, both)
       if (isEmpty(both)) {
         merged.valid = false
-        conflicts.push({ ruleIds: [rule.id], message: `La ${name} tiene condiciones opuestas sobre ${label}.` })
+        conflicts.push({ ruleIds: [rule.id], message: opposite(label) })
       }
     } else {
       merged.valid = false
-      conflicts.push({ ruleIds: [rule.id], message: `La ${name} tiene condiciones opuestas sobre ${label}.` })
+      conflicts.push({ ruleIds: [rule.id], message: opposite(label) })
     }
   }
   return merged
@@ -339,16 +431,20 @@ function sameConstraints(a: Map<string, Constraint>, b: Map<string, Constraint>)
  *   fire on the same candle). Rules over unrelated subjects are independent;
  * - two rules of the same side with equivalent conditions.
  */
-export function findConflicts(rules: Rule[]): Conflict[] {
+export function findConflicts(rules: Rule[], l: Locale = defaultLocale): Conflict[] {
+  const t = translator(l)
   const conflicts: Conflict[] = []
   const counters = { buy: 0, sell: 0 }
-  const merged = rules.map((rule) => merge(rule, ruleName(rule.side, ++counters[rule.side]), conflicts))
+  const merged = rules.map((rule) => merge(rule, ruleName(rule.side, ++counters[rule.side], l), conflicts, l))
   const valid = merged.filter((m) => m.valid)
   valid.forEach((a, i) => {
     for (const b of valid.slice(i + 1)) {
       if (a.rule.side === b.rule.side) {
         if (sameConstraints(a.constraints, b.constraints)) {
-          conflicts.push({ ruleIds: [a.rule.id, b.rule.id], message: `La ${b.name} repite la ${a.name}.` })
+          conflicts.push({
+            ruleIds: [a.rule.id, b.rule.id],
+            message: t(`La ${b.name} repite la ${a.name}.`, `${cap(b.name)} repeats ${a.name}.`),
+          })
         }
         continue
       }
@@ -357,7 +453,10 @@ export function findConflicts(rules: Rule[]): Conflict[] {
         const labels = shared.map((key) => a.labels.get(key)).join(", ")
         conflicts.push({
           ruleIds: [a.rule.id, b.rule.id],
-          message: `La ${a.name} y la ${b.name} se contradicen: pueden cumplirse a la vez sobre ${labels}.`,
+          message: t(
+            `La ${a.name} y la ${b.name} se contradicen: pueden cumplirse a la vez sobre ${labels}.`,
+            `${cap(a.name)} and ${b.name} contradict each other: both can hold at once on ${labels}.`
+          ),
         })
       }
     }
@@ -365,8 +464,10 @@ export function findConflicts(rules: Rule[]): Conflict[] {
   return conflicts
 }
 
-export function ruleName(side: RuleSide, position: number) {
-  return `regla de ${side === "buy" ? "compra" : "venta"} ${position}`
+export function ruleName(side: RuleSide, position: number, l: Locale = defaultLocale) {
+  return l === "en"
+    ? `${side === "buy" ? "buy" : "sell"} rule ${position}`
+    : `regla de ${side === "buy" ? "compra" : "venta"} ${position}`
 }
 
 export type StrategyErrors = {
@@ -380,30 +481,33 @@ export type StrategyErrors = {
 }
 
 /** Everything that blocks saving. `takenNames`: names of the user's other strategies. */
-export function validateStrategy(draft: StrategyDraft, takenNames: string[]): StrategyErrors {
+export function validateStrategy(draft: StrategyDraft, takenNames: string[], l: Locale = defaultLocale): StrategyErrors {
+  const t = translator(l)
   const name = draft.name.trim()
   const result: StrategyErrors = { general: [], rules: {} }
-  if (!name) result.name = "Escribe un nombre."
+  if (!name) result.name = t("Escribe un nombre.", "Enter a name.")
   else if (takenNames.some((taken) => taken.trim().toLowerCase() === name.toLowerCase()))
-    result.name = "Ya tienes una estrategia con este nombre."
-  if (!(draft.initialCapital > 0 && draft.initialCapital <= 1e9)) result.initialCapital = "Debe ser mayor que 0."
-  if (!(draft.feePct >= 0 && draft.feePct <= 5)) result.feePct = "Entre 0 y 5 %."
-  if (!draft.rules.some((r) => r.side === "buy")) result.general.push("Añade al menos una regla de compra.")
-  if (draft.rules.length > MAX_RULES) result.general.push(`Como máximo ${MAX_RULES} reglas.`)
+    result.name = t("Ya tienes una estrategia con este nombre.", "You already have a strategy with this name.")
+  if (!(draft.initialCapital > 0 && draft.initialCapital <= 1e9))
+    result.initialCapital = t("Debe ser mayor que 0.", "Must be greater than 0.")
+  if (!(draft.feePct >= 0 && draft.feePct <= 5)) result.feePct = t("Entre 0 y 5 %.", "Between 0 and 5%.")
+  if (!draft.rules.some((r) => r.side === "buy"))
+    result.general.push(t("Añade al menos una regla de compra.", "Add at least one buy rule."))
+  if (draft.rules.length > MAX_RULES) result.general.push(t(`Como máximo ${MAX_RULES} reglas.`, `At most ${MAX_RULES} rules.`))
 
   for (const rule of draft.rules) {
     const { unit, value } = rule.size
     result.rules[rule.id] = {
       size: !(value > 0)
-        ? "Debe ser mayor que 0."
+        ? t("Debe ser mayor que 0.", "Must be greater than 0.")
         : unit === "pct" && value > 100
-          ? "Como máximo 100 %."
+          ? t("Como máximo 100 %.", "At most 100%.")
           : undefined,
-      conditions: rule.conditions.map((c) => specOf(c).validate(c)),
+      conditions: rule.conditions.map((c) => specOf(c).validate(c, l)),
       conflicts: [],
     }
   }
-  for (const conflict of findConflicts(draft.rules)) {
+  for (const conflict of findConflicts(draft.rules, l)) {
     for (const id of conflict.ruleIds) result.rules[id].conflicts.push(conflict.message)
   }
   return result

@@ -1,6 +1,6 @@
 import { rangePresets, timeframes } from "@/lib/candles";
 import { exceedsDepth, readLimitedText } from "@/lib/server/body";
-import { presetStrategies } from "@/lib/preset-strategies";
+import { presetNames } from "@/lib/preset-strategies";
 import {
   conditionKinds,
   hasErrors,
@@ -57,7 +57,7 @@ export function parseStrategyDraft(body: unknown): ParsedDraft {
     recommendedRange: recommendedRange as StrategyDraft["recommendedRange"],
   };
   // Own names are enforced by the unique index; only the built-in names are checked here.
-  const errors = validateStrategy(draft, presetStrategies.map((s) => s.name));
+  const errors = validateStrategy(draft, presetNames);
   if (hasErrors(errors)) {
     const messages = [
       errors.name,

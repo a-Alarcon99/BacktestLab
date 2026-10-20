@@ -1,5 +1,6 @@
 import { refreshMe } from "@/lib/session"
-import { webFetch, WebApiError } from "@/lib/web-api"
+import { defaultLocale, translator, type Locale } from "@/lib/i18n"
+import { describeWebError, webFetch, WebApiError } from "@/lib/web-api"
 import type { Timeframe } from "@/lib/candles"
 import type { Strategy } from "@/lib/strategy"
 
@@ -111,26 +112,38 @@ export function recordFromResult(request: BacktestRequest, result: BacktestResul
 }
 
 /** User-facing message for a failed run. */
-export function describeBacktestError(error: unknown) {
-  if (!(error instanceof WebApiError)) return "No se pudo conectar con el servidor de backtesting."
-  if (error.status === 429 && error.code === "limit_reached") return error.message
-  if (error.status === 429) return "Demasiadas peticiones. Espera un momento antes de reintentarlo."
+export function describeBacktestError(error: unknown, locale: Locale = defaultLocale) {
+  const t = translator(locale)
+  if (!(error instanceof WebApiError))
+    return t("No se pudo conectar con el servidor de backtesting.", "Couldn't reach the backtesting server.")
+  if (error.status === 429) return describeWebError(error, locale, error.message)
   if (error.code === "engine_misconfigured")
-    return "El motor de backtesting no acepta las peticiones de la web (revisa INTERNAL_API_KEY en ambas apps)."
-  if (error.status === 403) return "Petición bloqueada por origen. Abre la web desde la URL configurada en NEXT_PUBLIC_APP_URL."
-  if (error.status === 502 || error.status === 503) return error.message
-  if (error.status === 404) return "El activo no existe o no está disponible."
+    return t(
+      "El motor de backtesting no acepta las peticiones de la web (revisa INTERNAL_API_KEY en ambas apps).",
+      "The backtesting engine rejects the website's requests (check INTERNAL_API_KEY in both apps)."
+    )
+  if (error.status === 403)
+    return t(
+      "Petición bloqueada por origen. Abre la web desde la URL configurada en NEXT_PUBLIC_APP_URL.",
+      "Request blocked by origin. Open the website from the URL set in NEXT_PUBLIC_APP_URL."
+    )
+  if (error.status === 502 || error.status === 503)
+    return t(error.message, "The backtesting engine isn't available right now. Try again in a few seconds.")
+  if (error.status === 404) return t("El activo no existe o no está disponible.", "The asset doesn't exist or isn't available.")
   if (error.status === 422) {
     const { detail } = error
     if (typeof detail === "string") {
       return detail === "Not enough candles in the range" || detail === "The range must be at least 1 day"
-        ? "No hay suficientes velas en el rango elegido. Amplía las fechas o usa una temporalidad menor."
+        ? t(
+            "No hay suficientes velas en el rango elegido. Amplía las fechas o usa una temporalidad menor.",
+            "There aren't enough candles in the chosen range. Widen the dates or use a smaller timeframe."
+          )
         : detail
     }
     if (Array.isArray(detail) && detail.every((d) => typeof d === "string")) return detail.join(" ")
-    return "La estrategia o los parámetros del backtest no son válidos."
+    return t("La estrategia o los parámetros del backtest no son válidos.", "The strategy or the backtest parameters aren't valid.")
   }
-  return "El servidor de backtesting ha fallado. Inténtalo de nuevo."
+  return t("El servidor de backtesting ha fallado. Inténtalo de nuevo.", "The backtesting server failed. Try again.")
 }
 
 /** `true` when the failure is a quota limit (the UI offers to sign up / shows the plan). */

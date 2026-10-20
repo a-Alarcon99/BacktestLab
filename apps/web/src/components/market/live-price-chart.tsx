@@ -2,43 +2,45 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ChartCandlestickIcon, ChartLineIcon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { fetchCandles, timeframes, type Candle, type Timeframe } from "@/lib/candles"
 import { chartTypes, useAssetView } from "./asset-view"
 import { PriceChart } from "./price-chart"
 
-const chartTypeLabels = {
-  line: (
-    <>
-      <ChartLineIcon />
-      Línea
-    </>
-  ),
-  candles: (
-    <>
-      <ChartCandlestickIcon />
-      Velas
-    </>
-  ),
-}
 
 const OLDER_RETRY_COOLDOWN_MS = 3_000
 
 /** Timeframe and line/candles toggle for the price chart card header. */
 function PriceChartControls() {
   const { timeframe, setTimeframe, chartType, setChartType } = useAssetView()
+  const { t } = useI18n()
+  const chartTypeLabels = {
+    line: (
+      <>
+        <ChartLineIcon />
+        {t("Línea", "Line")}
+      </>
+    ),
+    candles: (
+      <>
+        <ChartCandlestickIcon />
+        {t("Velas", "Candles")}
+      </>
+    ),
+  }
   return (
     <div className="flex flex-wrap items-center gap-2">
       <SegmentedControl
-        label="Temporalidad del gráfico"
+        label={t("Temporalidad del gráfico", "Chart timeframe")}
         options={timeframes}
         value={timeframe}
         onValueChange={setTimeframe}
         size="sm"
       />
       <SegmentedControl
-        label="Tipo de gráfico"
+        label={t("Tipo de gráfico", "Chart type")}
         options={chartTypes}
         value={chartType}
         onValueChange={setChartType}
@@ -64,6 +66,7 @@ function LivePriceChart({
   initialCandles?: Candle[]
 }) {
   const { timeframe, chartType } = useAssetView()
+  const { t } = useI18n()
   const [series, setSeries] = useState<Partial<Record<Timeframe, Candle[] | "error">>>(
     initialCandles ? { [initialTimeframe]: initialCandles } : {}
   )
@@ -113,15 +116,21 @@ function LivePriceChart({
   if (candles === "error") {
     return (
       <div className="flex h-64 flex-col items-center justify-center gap-3 text-center md:h-80">
-        <p className="text-caption text-muted-foreground">No se pudieron cargar las velas de {timeframe}.</p>
+        <p className="text-caption text-muted-foreground">
+          {t(`No se pudieron cargar las velas de ${timeframe}.`, `Couldn't load the ${timeframe} candles.`)}
+        </p>
         <Button size="sm" variant="outline" onClick={() => setSeries((s) => ({ ...s, [timeframe]: undefined }))}>
-          Reintentar
+          {t("Reintentar", "Retry")}
         </Button>
       </div>
     )
   }
   if (candles.length < 2) {
-    return <p className="py-10 text-center text-caption text-muted-foreground">Sin datos de precio para este periodo.</p>
+    return (
+      <p className="py-10 text-center text-caption text-muted-foreground">
+        {t("Sin datos de precio para este periodo.", "No price data for this period.")}
+      </p>
+    )
   }
   return (
     <PriceChart

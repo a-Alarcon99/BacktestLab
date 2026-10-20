@@ -45,6 +45,9 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // The root layout is `app/[lang]/layout.tsx`: URLs that match no page are answered by
+  // `app/global-not-found.tsx` (a 404 with its HTML rendered on the server).
+  experimental: { globalNotFound: true },
   poweredByHeader: false,
   // The app uses no `next/image` (icons are plain static files), so the optimizer is turned off
   // and, should it be reached anyway, only accepts the local icons with no query string: the

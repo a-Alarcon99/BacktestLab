@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react"
+import { defaultLocale, type Locale } from "@/lib/i18n"
 
 // Who the visitor is (guest or account), their plan limits and usage, as reported by `/api/me`.
 // The server is the only authority: this is a display cache, never an enforcement point.
@@ -63,6 +64,6 @@ export const getMe = () => current
 export const meScope = (me: Me | undefined) => (me ? (me.user?.id ?? "guest") : undefined)
 
 /** "2 de 3" style description of a quota; `null` max = unlimited. */
-export function quotaText(used: number, max: number | null) {
-  return max === null ? `${used}` : `${Math.min(used, max)} de ${max}`
+export function quotaText(used: number, max: number | null, locale: Locale = defaultLocale) {
+  return max === null ? `${used}` : `${Math.min(used, max)} ${locale === "en" ? "of" : "de"} ${max}`
 }

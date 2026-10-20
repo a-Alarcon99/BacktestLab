@@ -3,8 +3,10 @@
 import { createContext, useContext, useState } from "react"
 import { cn } from "cn"
 import { SearchIcon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { badgeVariants } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { categoryLabel } from "@/lib/categories"
 
 /** `null` = all categories. */
 const CategoryContext = createContext<{
@@ -26,10 +28,14 @@ function CategoryFilterProvider({ children }: { children: React.ReactNode }) {
 
 function CategoryFilter({ categories, className }: { categories: string[]; className?: string }) {
   const { category: active, setCategory } = useContext(CategoryContext)
-  const options = [{ label: "Todos", value: null }, ...categories.map((c) => ({ label: c, value: c }))]
+  const { locale, t } = useI18n()
+  const options = [
+    { label: t("Todos", "All"), value: null },
+    ...categories.map((c) => ({ label: categoryLabel(c, locale), value: c })),
+  ]
 
   return (
-    <div role="group" aria-label="Categoría" className={className}>
+    <div role="group" aria-label={t("Categoría", "Category")} className={className}>
       {options.map(({ label, value }) => {
         const pressed = value === active
         return (
@@ -55,15 +61,16 @@ function CategoryFilter({ categories, className }: { categories: string[]; class
 /** Search box filtering the items by name or symbol. */
 function CategoryFilterSearch({ className }: { className?: string }) {
   const { query, setQuery } = useContext(CategoryContext)
+  const { t } = useI18n()
   return (
     <label className={cn("relative", className)}>
-      <span className="sr-only">Buscar activo</span>
+      <span className="sr-only">{t("Buscar activo", "Search asset")}</span>
       <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Buscar por nombre o símbolo"
+        placeholder={t("Buscar por nombre o símbolo", "Search by name or symbol")}
         className="h-8 pl-9"
       />
     </label>

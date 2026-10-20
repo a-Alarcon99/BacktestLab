@@ -1,19 +1,23 @@
 import { TriangleIcon } from "lucide-react"
 import { cn } from "cn"
+import { defaultLocale, intlLocale, type Locale } from "@/lib/i18n"
 
-const percent = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+const percent: Record<Locale, Intl.NumberFormat> = {
+  es: new Intl.NumberFormat(intlLocale.es, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  en: new Intl.NumberFormat(intlLocale.en, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+}
 
 /** Signed percentage, colored by direction. `value` is a percentage (2.5 = +2.50%). */
 function PriceChange({
   value,
   variant = "text",
+  locale = defaultLocale,
   className,
 }: {
   value: number
   variant?: "text" | "pill"
+  /** Server callers pass it; client callers may too (Spanish otherwise). */
+  locale?: Locale
   className?: string
 }) {
   const up = value >= 0
@@ -31,8 +35,8 @@ function PriceChange({
         aria-hidden
         className={cn("size-2.5 fill-current", !up && "rotate-180")}
       />
-      <span className="sr-only">{up ? "Sube" : "Baja"}</span>
-      {percent.format(Math.abs(value))}%
+      <span className="sr-only">{locale === "en" ? (up ? "Up" : "Down") : up ? "Sube" : "Baja"}</span>
+      {percent[locale].format(Math.abs(value))}%
     </span>
   )
 }

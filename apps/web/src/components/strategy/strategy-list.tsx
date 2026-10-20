@@ -4,25 +4,26 @@ import { useState } from "react"
 import Link from "next/link"
 import { EyeIcon, LockIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { cn } from "cn"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { formatDate } from "@/lib/format"
-import { presetInfo, presetStrategies } from "@/lib/preset-strategies"
+import { formatDate, numberFormat } from "@/lib/format"
+import { presetInfo, presetStrategiesFor } from "@/lib/preset-strategies"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { deleteStrategy, useStrategies } from "@/lib/storage/strategies"
 import { describeRule, ruleFamily, type Strategy } from "@/lib/strategy"
 import { ruleKinds } from "./rule-kind"
 import { RunStrategyButton, type RunnableAsset } from "./run-strategy-button"
 
-const capitalFormat = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 })
-
 /** "3 estrategias creadas", once the browser data is read. */
 function StrategyCount() {
   const { data } = useStrategies()
+  const { t } = useI18n()
   if (!data) return null
   return (
     <span className="num font-semibold text-foreground">
-      {data.length} {data.length === 1 ? "estrategia creada" : "estrategias creadas"}.
+      {data.length}{" "}
+      {data.length === 1 ? t("estrategia creada", "strategy created") : t("estrategias creadas", "strategies created")}.
     </span>
   )
 }
@@ -33,29 +34,26 @@ function StrategyCount() {
  */
 function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: string }) {
   const { data: strategies } = useStrategies()
+  const { locale, t, href } = useI18n()
 
-  if (!strategies) {
-    return (
-      <div aria-hidden className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div className="h-64 animate-pulse rounded-xl bg-muted/40" />
-        <div className="hidden h-64 animate-pulse rounded-xl bg-muted/40 md:block" />
-      </div>
-    )
-  }
-
+  // The built-in strategies don't depend on the visitor: they are rendered right away (and are in
+  // the server HTML, with their links); only the user's own list waits for the server.
   return (
     <>
     <section aria-labelledby="presets-title" className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <h2 id="presets-title" className="text-title font-bold">
-          Estrategias predefinidas
+          {t("Estrategias predefinidas", "Built-in strategies")}
         </h2>
         <p className="text-caption text-muted-foreground">
-          Una por horizonte temporal. No se pueden modificar, pero puedes ver sus reglas y ejecutarlas.
+          {t(
+            "Una por horizonte temporal. No se pueden modificar, pero puedes ver sus reglas y ejecutarlas.",
+            "One per time horizon. They can't be changed, but you can see their rules and run them."
+          )}
         </p>
       </div>
       <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {presetStrategies.map((strategy) => (
+        {presetStrategiesFor(locale).map((strategy) => (
           <li key={strategy.id}>
             <StrategyCard strategy={strategy} assets={assets} today={today} />
           </li>
@@ -64,8 +62,14 @@ function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: strin
     </section>
     <section aria-labelledby="own-title" className="flex flex-col gap-3">
       <h2 id="own-title" className="text-title font-bold">
-        Mis estrategias
+        {t("Mis estrategias", "My strategies")}
       </h2>
+    {!strategies ? (
+      <div aria-hidden className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="h-64 animate-pulse rounded-xl bg-muted/40" />
+        <div className="hidden h-64 animate-pulse rounded-xl bg-muted/40 md:block" />
+      </div>
+    ) : (
     <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {strategies.map((strategy) => (
         <li key={strategy.id}>
@@ -74,19 +78,22 @@ function StrategyList({ assets, today }: { assets: RunnableAsset[]; today: strin
       ))}
       <li>
         <Link
-          href="/strategies/new"
+          href={href("/strategies/new")}
           className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong p-4 text-center text-muted-foreground transition-colors outline-none hover:border-primary hover:bg-accent/50 hover:text-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
         >
           <span className="flex size-10 items-center justify-center rounded-full bg-accent text-accent-foreground">
             <PlusIcon className="size-5" />
           </span>
           <span className="font-semibold text-foreground">
-            {strategies.length === 0 ? "Crea tu primera estrategia" : "Nueva estrategia"}
+            {strategies.length === 0 ? t("Crea tu primera estrategia", "Create your first strategy") : t("Nueva estrategia", "New strategy")}
           </span>
-          <span className="max-w-56 text-caption">Combina reglas de compra y venta para crear la tuya.</span>
+          <span className="max-w-56 text-caption">
+            {t("Combina reglas de compra y venta para crear la tuya.", "Combine buy and sell rules to build your own.")}
+          </span>
         </Link>
       </li>
     </ul>
+    )}
     </section>
     </>
   )
@@ -102,6 +109,8 @@ function StrategyCard({
   today: string
 }) {
   const [confirming, setConfirming] = useState(false)
+  const { locale, t, href } = useI18n()
+  const capitalFormat = numberFormat(locale, { maximumFractionDigits: 2 })
   const preset = presetInfo[strategy.id]
   const buy = strategy.rules.filter((r) => r.side === "buy")
   const sell = strategy.rules.filter((r) => r.side === "sell")
@@ -112,24 +121,31 @@ function StrategyCard({
         <div className="flex min-w-0 flex-col gap-2">
           <h2 className="truncate text-body font-semibold">{strategy.name}</h2>
           <div className="flex flex-wrap gap-2">
-            {preset && <Badge>{preset.horizonLabel}</Badge>}
-            <Badge variant="up">{buy.length} compra</Badge>
-            <Badge variant="down">{sell.length} venta</Badge>
+            {preset && <Badge>{preset.horizonLabel[locale]}</Badge>}
+            <Badge variant="up">
+              {buy.length} {t("compra", "buy")}
+            </Badge>
+            <Badge variant="down">
+              {sell.length} {t("venta", "sell")}
+            </Badge>
             <Badge variant="outline" className="num">
               {capitalFormat.format(strategy.initialCapital)} USDT
             </Badge>
           </div>
         </div>
         {preset ? (
-          <span className="mt-1 shrink-0 text-muted-foreground" title="Predefinida: no se puede modificar">
+          <span
+            className="mt-1 shrink-0 text-muted-foreground"
+            title={t("Predefinida: no se puede modificar", "Built-in: can't be changed")}
+          >
             <LockIcon className="size-4" />
-            <span className="sr-only">Predefinida: no se puede modificar</span>
+            <span className="sr-only">{t("Predefinida: no se puede modificar", "Built-in: can't be changed")}</span>
           </span>
 ) : (
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Eliminar ${strategy.name}`}
+            aria-label={t(`Eliminar ${strategy.name}`, `Delete ${strategy.name}`)}
             className="hover:bg-down-soft hover:text-down"
             onClick={() => setConfirming(true)}
           >
@@ -141,8 +157,11 @@ function StrategyCard({
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title="Eliminar estrategia"
-        description={`«${strategy.name}» se eliminará de este navegador. Los backtests ya ejecutados se conservan en el historial.`}
+        title={t("Eliminar estrategia", "Delete strategy")}
+        description={t(
+          `«${strategy.name}» se eliminará de este navegador. Los backtests ya ejecutados se conservan en el historial.`,
+          `"${strategy.name}" will be deleted from this browser. Backtests already run stay in the history.`
+        )}
         onConfirm={() => deleteStrategy(strategy.id)}
       />
 
@@ -159,10 +178,10 @@ function StrategyCard({
               >
                 <Icon className="size-3.5" />
                 <span className="sr-only">
-                  {rule.side === "buy" ? "Compra" : "Venta"} · {label}
+                  {rule.side === "buy" ? t("Compra", "Buy") : t("Venta", "Sell")} · {label[locale]}
                 </span>
               </span>
-              <span className="min-w-0">{describeRule(rule)}</span>
+              <span className="min-w-0">{describeRule(rule, locale)}</span>
             </li>
           )
         })}
@@ -172,22 +191,24 @@ function StrategyCard({
         <span className="text-caption text-muted-foreground">
           {preset ? (
             <>
-              Velas: <span className="num">{preset.timeframe}</span>
+              {t("Velas: ", "Candles: ")}
+              <span className="num">{preset.timeframe[locale]}</span>
             </>
           ) : (
             <>
-              Actualizada el <span className="num">{formatDate(strategy.updatedAt)}</span>
+              {t("Actualizada el ", "Updated ")}
+              <span className="num">{formatDate(strategy.updatedAt, locale)}</span>
             </>
           )}
         </span>
         <span className="flex items-center gap-2">
           <Link
-            href={preset ? `/strategies/${strategy.id}` : `/strategies/${strategy.id}/edit`}
-            aria-label={`${preset ? "Ver reglas de" : "Editar"} ${strategy.name}`}
+            href={href(preset ? `/strategies/${strategy.id}` : `/strategies/${strategy.id}/edit`)}
+            aria-label={`${preset ? t("Ver reglas de", "View rules of") : t("Editar", "Edit")} ${strategy.name}`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             {preset ? <EyeIcon data-icon="inline-start" /> : <PencilIcon data-icon="inline-start" />}
-            {preset ? "Ver reglas" : "Editar"}
+            {preset ? t("Ver reglas", "View rules") : t("Editar", "Edit")}
           </Link>
           <RunStrategyButton strategy={strategy} assets={assets} today={today} />
         </span>

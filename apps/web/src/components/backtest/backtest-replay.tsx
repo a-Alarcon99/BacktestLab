@@ -9,6 +9,7 @@ import {
   SkipForwardIcon,
 } from "lucide-react"
 import { cn } from "cn"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { AssetAvatar } from "@/components/market/asset-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,49 +23,52 @@ import {
 } from "@/lib/backtests"
 import { estimateCandles } from "@/lib/candles"
 import { formatDate, formatPrice } from "@/lib/format"
+import { intlLocale, type Locale } from "@/lib/i18n"
 import { replayDuration } from "@/lib/replay"
 import { LimitCta } from "@/components/plan/plan-usage"
 import { addBacktest } from "@/lib/storage/backtests"
-import { describeSize, ruleName, specOf, type Rule } from "@/lib/strategy"
+import { describeConditions, describeSize, ruleName, type Rule } from "@/lib/strategy"
 
 export type ReplayRun = BacktestRequest & {
   /** "new": just executed (saved to the history); "review": re-run from the history. */
   mode: "new" | "review"
 }
 
-const count = new Intl.NumberFormat("es-ES", { useGrouping: "always" })
-const amount = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const signedAmount = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  signDisplay: "exceptZero",
-})
+/** Number and date formats of one language (built once per language). */
+function makeFormats(locale: Locale) {
+  const tag = intlLocale[locale]
+  return {
+    count: new Intl.NumberFormat(tag, { useGrouping: "always" }),
+    amount: new Intl.NumberFormat(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    signedAmount: new Intl.NumberFormat(tag, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }),
+    tradeDateTime: new Intl.DateTimeFormat(tag, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+    }),
+    axisDate: new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" }),
+    axisDateTime: new Intl.DateTimeFormat(tag, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }),
+  }
+}
+
+const formatsByLocale: Record<Locale, ReturnType<typeof makeFormats>> = { es: makeFormats("es"), en: makeFormats("en") }
+
+/** Formats and translator of the page's language. */
+function useReplayText() {
+  const i18n = useI18n()
+  return { ...i18n, f: formatsByLocale[i18n.locale] }
+}
 
 /** Narrowest slot per candle: long runs show a window of this density that follows the animation. */
 const MIN_CANDLE_SLOT = 12
-
-const tradeDateTime = new Intl.DateTimeFormat("es-ES", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-})
 
 /** Pixels around a marker that count as hovering it. */
 const MARKER_HIT = 14
 
 type Hover = { n: number; x: number; y: number }
-
-const axisDate = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "2-digit", timeZone: "UTC" })
-const axisDateTime = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-})
 
 type RunState =
   | { status: "loading" }
@@ -97,6 +101,7 @@ function BacktestReplayDialog({
 function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void }) {
   const [state, setState] = useState<RunState>({ status: "loading" })
   const [attempt, setAttempt] = useState(0)
+  const { locale, t, f } = useReplayText()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -108,22 +113,22 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
         if (mode === "new") addBacktest(recordFromResult(request, result)).catch(() => {})
       },
       (error) => {
-        if (!controller.signal.aborted) setState({ status: "error", message: describeBacktestError(error) })
+        if (!controller.signal.aborted) setState({ status: "error", message: describeBacktestError(error, locale) })
       }
     )
     return () => controller.abort()
-  }, [run, attempt])
+  }, [run, attempt, locale])
 
   if (state.status === "ready") return <ReplayAnimation run={run} result={state.result} onClose={onClose} />
 
   const estimate = estimateCandles(run.from, run.to, run.timeframe)
   return (
     <>
-      <ReplayHeader run={run} candles={`≈ ${count.format(estimate)} velas`}>
+      <ReplayHeader run={run} candles={`≈ ${f.count.format(estimate)} ${t("velas", "candles")}`}>
         {state.status === "loading" ? (
           <Badge variant="primary" className="hidden sm:inline-flex">
             <LoaderCircleIcon className="animate-spin" />
-            Calculando…
+            {t("Calculando…", "Calculating…")}
           </Badge>
         ) : (
           <Badge variant="down" className="hidden sm:inline-flex">
@@ -136,10 +141,12 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
         {state.status === "loading" ? (
           <>
             <LoaderCircleIcon className="size-8 animate-spin text-primary" />
-            <p className="font-semibold">Calculando el backtest</p>
+            <p className="font-semibold">{t("Calculando el backtest", "Calculating the backtest")}</p>
             <p className="max-w-sm text-caption text-muted-foreground">
-              Descargando velas reales y aplicando las reglas de la estrategia. La primera vez que se usa un rango puede
-              tardar unos segundos.
+              {t(
+                "Descargando velas reales y aplicando las reglas de la estrategia. La primera vez que se usa un rango puede tardar unos segundos.",
+                "Downloading real candles and applying the strategy's rules. The first time a range is used it may take a few seconds."
+              )}
             </p>
           </>
         ) : (
@@ -147,7 +154,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
             <span className="flex size-10 items-center justify-center rounded-full bg-down-soft text-down">
               <AlertTriangleIcon className="size-5" />
             </span>
-            <p className="font-semibold">No se pudo ejecutar el backtest</p>
+            <p className="font-semibold">{t("No se pudo ejecutar el backtest", "The backtest couldn't run")}</p>
             <p className="max-w-md text-caption text-muted-foreground">{state.message}</p>
             <LimitCta />
           </>
@@ -155,7 +162,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
       </div>
       <footer className="flex justify-end gap-2 border-t px-4 py-3 md:px-5">
         <Button variant="outline" onClick={onClose}>
-          Cerrar
+          {t("Cerrar", "Close")}
         </Button>
         {state.status === "error" && (
           <Button
@@ -165,7 +172,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
             }}
           >
             <RotateCcwIcon data-icon="inline-start" />
-            Reintentar
+            {t("Reintentar", "Retry")}
           </Button>
         )}
       </footer>
@@ -174,6 +181,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
 }
 
 function ReplayHeader({ run, candles, children }: { run: ReplayRun; candles: string; children: React.ReactNode }) {
+  const { locale, t } = useI18n()
   return (
     <header className="flex items-start gap-3 border-b px-4 py-3 md:px-5">
       <AssetAvatar symbol={run.symbol} size={40} />
@@ -182,8 +190,8 @@ function ReplayHeader({ run, candles, children }: { run: ReplayRun; candles: str
           {run.symbol}/USDT · {run.strategy.name}
         </DialogTitle>
         <DialogDescription className="num text-caption text-muted-foreground">
-          {run.timeframe} · {formatDate(run.from)} → {formatDate(run.to)} · {candles} ·{" "}
-          {run.mode === "new" ? "Backtest ejecutado ahora" : "Revisión de backtest"}
+          {run.timeframe} · {formatDate(run.from, locale)} → {formatDate(run.to, locale)} · {candles} ·{" "}
+          {run.mode === "new" ? t("Backtest ejecutado ahora", "Backtest run just now") : t("Revisión de backtest", "Backtest review")}
         </DialogDescription>
       </div>
       {children}
@@ -204,6 +212,8 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
   const [hover, setHover] = useState<Hover | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skipRef = useRef(false)
+  const { locale, t, f } = useReplayText()
+  const { amount, count, signedAmount } = f
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -225,7 +235,7 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
     }
     const font = `11px ${getComputedStyle(canvas).fontFamily}`
     const intraday = run.timeframe === "1h" || run.timeframe === "4h"
-    const dateFormat = intraday ? axisDateTime : axisDate
+    const dateFormat = intraday ? f.axisDateTime : f.axisDate
 
     let raf = 0
     let visible = 1
@@ -470,7 +480,7 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
       canvas.removeEventListener("wheel", onWheel)
       canvas.removeEventListener("pointerleave", onLeave)
     }
-  }, [result, steps, candleCount, runKey, run.timeframe])
+  }, [result, steps, candleCount, runKey, run.timeframe, f, amount])
 
   const i = step - 1
   const progress = step / steps
@@ -487,10 +497,10 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
 
   return (
     <>
-      <ReplayHeader run={run} candles={`${count.format(candleCount)} velas`}>
+      <ReplayHeader run={run} candles={`${count.format(candleCount)} ${t("velas", "candles")}`}>
         <Badge variant={done ? "up" : "primary"} className="hidden sm:inline-flex">
           {done ? <CheckCircle2Icon /> : <LoaderCircleIcon className="animate-spin" />}
-          {done ? "Completado" : "Ejecutando…"}
+          {done ? t("Completado", "Done") : t("Ejecutando…", "Running…")}
         </Badge>
       </ReplayHeader>
 
@@ -500,32 +510,36 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
             <div className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
           </div>
           <p className="num flex justify-between gap-3 text-caption text-muted-foreground">
-            <span>{formatDate(result.candles[i].time)}</span>
+            <span>{formatDate(result.candles[i].time, locale)}</span>
             <span>
-              Vela {count.format(Math.round(progress * candleCount))} / {count.format(candleCount)} ·{" "}
+              {t("Vela", "Candle")} {count.format(Math.round(progress * candleCount))} / {count.format(candleCount)} ·{" "}
               {Math.round(progress * 100)}%
             </span>
           </p>
         </div>
 
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Live label="Precio" value={formatPrice(result.candles[i].close)} />
-          <Live label="Compras" value={String(result.buys[i])} tone="up" />
-          <Live label="Ventas" value={String(result.sells[i])} tone="down" />
-          <Live label="PnL realizado" value={`${signedAmount.format(result.realized[i])} USDT`} tone={sign(result.realized[i])} />
-          <Live label="Capital" value={`${amount.format(result.equity[i])} USDT`} />
+          <Live label={t("Precio", "Price")} value={formatPrice(result.candles[i].close, locale)} />
+          <Live label={t("Compras", "Buys")} value={String(result.buys[i])} tone="up" />
+          <Live label={t("Ventas", "Sells")} value={String(result.sells[i])} tone="down" />
+          <Live
+            label={t("PnL realizado", "Realized PnL")}
+            value={`${signedAmount.format(result.realized[i])} USDT`}
+            tone={sign(result.realized[i])}
+          />
+          <Live label={t("Capital", "Equity")} value={`${amount.format(result.equity[i])} USDT`} />
         </dl>
 
         <div className="relative h-72 overflow-hidden rounded-lg border bg-background md:h-96">
           <canvas
             ref={canvasRef}
             role="img"
-            aria-label="Animación de velas y operaciones de la estrategia"
+            aria-label={t("Animación de velas y operaciones de la estrategia", "Animation of the candles and the strategy's trades")}
             className={cn("size-full touch-pan-y", pannable && "cursor-grab active:cursor-grabbing")}
           />
           {pannable && (
             <p className="pointer-events-none absolute top-2 right-20 text-caption text-muted-foreground">
-              Arrastra para ver el resto de velas
+              {t("Arrastra para ver el resto de velas", "Drag to see the other candles")}
             </p>
           )}
           {done && hover && (
@@ -538,15 +552,15 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
             />
           )}
           <div className="pointer-events-none absolute top-2 left-3 flex flex-wrap items-center gap-2 text-caption">
-            <span className="inline-flex items-center gap-1 text-up">▲ Compra</span>
-            <span className="inline-flex items-center gap-1 text-down">▼ Venta</span>
+            <span className="inline-flex items-center gap-1 text-up">▲ {t("Compra", "Buy")}</span>
+            <span className="inline-flex items-center gap-1 text-down">▼ {t("Venta", "Sell")}</span>
             {lastTrade && (
               <Badge
                 key={lastTrade.time}
                 variant={lastTrade.side === "buy" ? "up" : "down"}
                 className="num motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-90 motion-safe:slide-in-from-left-2"
               >
-                {lastTrade.side === "buy" ? "Compra" : "Venta"} a {formatPrice(lastTrade.price)}
+                {lastTrade.side === "buy" ? t("Compra", "Buy") : t("Venta", "Sell")} {t("a", "at")} {formatPrice(lastTrade.price, locale)}
               </Badge>
             )}
           </div>
@@ -558,17 +572,23 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
       <footer className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5">
         <p className="num text-caption text-muted-foreground">
           {done
-            ? `Capital inicial ${amount.format(run.strategy.initialCapital)} USDT · comisión ${amount.format(run.strategy.feePct)} % por orden · órdenes al cierre de la vela.`
-            : `La animación dura ≈ ${seconds} s según las velas analizadas.`}
+            ? t(
+                `Capital inicial ${amount.format(run.strategy.initialCapital)} USDT · comisión ${amount.format(run.strategy.feePct)} % por orden · órdenes al cierre de la vela.`,
+                `Initial capital ${amount.format(run.strategy.initialCapital)} USDT · ${amount.format(run.strategy.feePct)}% fee per order · orders at the candle close.`
+              )
+            : t(
+                `La animación dura ≈ ${seconds} s según las velas analizadas.`,
+                `The animation lasts ≈ ${seconds} s depending on the candles analyzed.`
+              )}
         </p>
         <div className="flex gap-2 self-end">
           {done ? (
             <>
               <Button variant="outline" onClick={restart}>
                 <RotateCcwIcon data-icon="inline-start" />
-                Repetir animación
+                {t("Repetir animación", "Replay animation")}
               </Button>
-              <Button onClick={onClose}>Cerrar</Button>
+              <Button onClick={onClose}>{t("Cerrar", "Close")}</Button>
             </>
           ) : (
             <Button
@@ -578,7 +598,7 @@ function ReplayAnimation({ run, result, onClose }: { run: ReplayRun; result: Bac
               }}
             >
               <SkipForwardIcon data-icon="inline-start" />
-              Omitir animación
+              {t("Omitir animación", "Skip animation")}
             </Button>
           )}
         </div>
@@ -601,10 +621,12 @@ function TradeTooltip({
   x: number
   y: number
 }) {
+  const { locale, t, f } = useReplayText()
   const buy = trade.side === "buy"
   const rule = rules.find((r) => r.id === trade.ruleId)
   const position = rule ? rules.filter((r) => r.side === rule.side).indexOf(rule) + 1 : 0
-  const date = intraday ? tradeDateTime.format(new Date(trade.time)) : formatDate(trade.time)
+  const date = intraday ? f.tradeDateTime.format(new Date(trade.time)) : formatDate(trade.time, locale)
+  const name = rule ? ruleName(rule.side, position, locale) : ""
   // Measured after render so the card always stays inside the chart: above the marker when it
   // fits, below otherwise, and clamped horizontally and vertically.
   const ref = useRef<HTMLDivElement>(null)
@@ -632,17 +654,17 @@ function TradeTooltip({
       className="pointer-events-none absolute z-10 w-64 max-w-[calc(100%-1rem)] rounded-lg border bg-popover p-3 text-caption text-popover-foreground shadow-lg"
       style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? "visible" : "hidden" }}
     >
-      <p className={cn("mb-1.5 font-bold", buy ? "text-up" : "text-down")}>{buy ? "Compra" : "Venta"}</p>
+      <p className={cn("mb-1.5 font-bold", buy ? "text-up" : "text-down")}>{buy ? t("Compra", "Buy") : t("Venta", "Sell")}</p>
       <dl className="num flex flex-col gap-1">
-        <TipRow label="Precio" value={formatPrice(trade.price)} />
-        <TipRow label="Fecha" value={`${date}${intraday ? " UTC" : ""}`} />
+        <TipRow label={t("Precio", "Price")} value={formatPrice(trade.price, locale)} />
+        <TipRow label={t("Fecha", "Date")} value={`${date}${intraday ? " UTC" : ""}`} />
         <TipRow
-          label="Condición"
-          value={rule ? rule.conditions.map((c) => specOf(c).describe(c)).join(" y ") : "Regla eliminada"}
+          label={t("Condición", "Condition")}
+          value={rule ? describeConditions(rule, locale) : t("Regla eliminada", "Deleted rule")}
         />
         <TipRow
-          label="Regla"
-          value={rule ? `${ruleName(rule.side, position)[0].toUpperCase()}${ruleName(rule.side, position).slice(1)} · ${describeSize(rule)}` : "—"}
+          label={t("Regla", "Rule")}
+          value={rule ? `${name[0].toUpperCase()}${name.slice(1)} · ${describeSize(rule, locale)}` : "—"}
         />
       </dl>
     </div>
@@ -671,31 +693,38 @@ function Live({ label, value, tone }: { label: string; value: string; tone?: "up
 
 /** Final statistics, revealed tile by tile when the animation ends. */
 function Results({ result }: { result: BacktestResult }) {
+  const { t, f } = useReplayText()
+  const { amount, count, signedAmount } = f
+  const pct = t(" %", "%")
   const s = result.stats
   const tiles: { label: string; value: string; tone?: "up" | "down"; hint?: string }[] = [
-    { label: "Compras", value: String(s.buys) },
-    { label: "Ventas", value: String(s.sells) },
-    { label: "PnL realizado", value: `${signedAmount.format(s.realizedPnl)} USDT`, tone: sign(s.realizedPnl) },
+    { label: t("Compras", "Buys"), value: String(s.buys) },
+    { label: t("Ventas", "Sells"), value: String(s.sells) },
+    { label: t("PnL realizado", "Realized PnL"), value: `${signedAmount.format(s.realizedPnl)} USDT`, tone: sign(s.realizedPnl) },
     {
-      label: "PnL no realizado",
+      label: t("PnL no realizado", "Unrealized PnL"),
       value: `${signedAmount.format(s.unrealizedPnl)} USDT`,
       tone: sign(s.unrealizedPnl),
-      hint: s.openPosition ? "Posición abierta" : "Sin posición abierta",
+      hint: s.openPosition ? t("Posición abierta", "Open position") : t("Sin posición abierta", "No open position"),
     },
-    { label: "Rentabilidad total", value: `${signedAmount.format(s.returnPct)} %`, tone: sign(s.returnPct) },
-    { label: "Capital final", value: `${amount.format(s.finalCapital)} USDT` },
-    { label: "Tasa de acierto", value: `${amount.format(s.winRatePct)} %`, hint: "Ventas con beneficio" },
-    { label: "Drawdown máx.", value: `−${amount.format(s.maxDrawdownPct)} %`, tone: s.maxDrawdownPct > 0 ? "down" : undefined },
+    { label: t("Rentabilidad total", "Total return"), value: `${signedAmount.format(s.returnPct)}${pct}`, tone: sign(s.returnPct) },
+    { label: t("Capital final", "Final equity"), value: `${amount.format(s.finalCapital)} USDT` },
+    { label: t("Tasa de acierto", "Win rate"), value: `${amount.format(s.winRatePct)}${pct}`, hint: t("Ventas con beneficio", "Profitable sells") },
+    {
+      label: t("Drawdown máx.", "Max drawdown"),
+      value: `−${amount.format(s.maxDrawdownPct)}${pct}`,
+      tone: s.maxDrawdownPct > 0 ? "down" : undefined,
+    },
   ]
   return (
     <section
-      aria-label="Estadísticas del backtest"
+      aria-label={t("Estadísticas del backtest", "Backtest statistics")}
       className="flex flex-col gap-3 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-4 motion-safe:duration-500"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-title font-bold">Resultados</h3>
+        <h3 className="text-title font-bold">{t("Resultados", "Results")}</h3>
         <span className="num text-caption text-muted-foreground">
-          {count.format(result.candleCount)} velas analizadas · Sharpe {amount.format(s.sharpe)}
+          {count.format(result.candleCount)} {t("velas analizadas", "candles analyzed")} · Sharpe {amount.format(s.sharpe)}
         </span>
       </div>
       <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">

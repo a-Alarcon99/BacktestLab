@@ -1,4 +1,5 @@
 import { apiFetch } from "@/lib/api"
+import type { Locale } from "@/lib/i18n"
 
 // Client-safe: no database or `next/cache` imports, so client components can use it.
 
@@ -27,6 +28,15 @@ export const rangePresets = ["1M", "3M", "6M", "1A", "3A", "Máx."] as const
 export type RangePreset = (typeof rangePresets)[number]
 
 const presetMonths: Record<Exclude<RangePreset, "Máx.">, number> = { "1M": 1, "3M": 3, "6M": 6, "1A": 12, "3A": 36 }
+
+/**
+ * Text shown for each preset. The values themselves stay as they are in every language: they are
+ * stored in the user's strategies (`recommendedRange`).
+ */
+export const rangePresetLabels: Record<Locale, Record<RangePreset, string>> = {
+  es: { "1M": "1M", "3M": "3M", "6M": "6M", "1A": "1A", "3A": "3A", "Máx.": "Máx." },
+  en: { "1M": "1M", "3M": "3M", "6M": "6M", "1A": "1Y", "3A": "3Y", "Máx.": "Max" },
+}
 
 /** Start date (YYYY-MM-DD) of a preset ending `today`, clamped to the asset's available history. */
 export function presetFrom(preset: RangePreset, today: string, historySince: string) {

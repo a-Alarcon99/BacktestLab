@@ -2,24 +2,30 @@
 
 import { useMemo, useState } from "react"
 import { ChevronRightIcon, Trash2Icon } from "lucide-react"
+import { useI18n } from "@/components/i18n/locale-provider"
 import { AssetAvatar } from "@/components/market/asset-avatar"
 import { PriceChange } from "@/components/market/price-change"
 import { Sparkline } from "@/components/market/sparkline"
 import { Badge } from "@/components/ui/badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { BacktestRecord } from "@/lib/backtests"
-import { formatDate } from "@/lib/format"
+import { formatDate, numberFormat } from "@/lib/format"
+import type { Translate } from "@/lib/i18n"
 import { deleteBacktest } from "@/lib/storage/backtests"
 import { BacktestReplayDialog, type ReplayRun } from "./backtest-replay"
 
-const decimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const oneDecimal = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 // Shared by the column header and every row so the columns line up on large screens.
 const rowGrid =
   "lg:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_auto] lg:items-center lg:gap-4 lg:pr-14 xl:grid-cols-[minmax(0,2.4fr)_repeat(5,minmax(0,1fr))_7.5rem_auto]"
 
-const columns = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de acierto", "Operaciones"]
+const columnsOf = (t: Translate) => [
+  t("Rentabilidad", "Return"),
+  t("Drawdown máx.", "Max drawdown"),
+  t("Ratio de Sharpe", "Sharpe ratio"),
+  t("Tasa de acierto", "Win rate"),
+  t("Operaciones", "Trades"),
+]
 
 /**
  * History of backtest runs, newest first. Each row re-runs that backtest (same strategy
@@ -28,6 +34,7 @@ const columns = ["Rentabilidad", "Drawdown máx.", "Ratio de Sharpe", "Tasa de a
 function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
   const [selected, setSelected] = useState<BacktestRecord | null>(null)
   const [deleting, setDeleting] = useState<BacktestRecord | null>(null)
+  const { t } = useI18n()
   const run = useMemo<ReplayRun | null>(
     () =>
       selected && {
@@ -46,10 +53,13 @@ function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title="Eliminar backtest"
+        title={t("Eliminar backtest", "Delete backtest")}
         description={
           deleting &&
-          `${deleting.symbol}/USDT · ${deleting.strategy.name}. Se quitará del historial y no se puede deshacer.`
+          t(
+            `${deleting.symbol}/USDT · ${deleting.strategy.name}. Se quitará del historial y no se puede deshacer.`,
+            `${deleting.symbol}/USDT · ${deleting.strategy.name}. It will be removed from the history and can't be undone.`
+          )
         }
         onConfirm={() => deleting && void deleteBacktest(deleting.id)}
       />
@@ -67,8 +77,10 @@ function BacktestTable({
   onOpen: (backtest: BacktestRecord) => void
   onDelete: (backtest: BacktestRecord) => void
 }) {
+  const { t } = useI18n()
+  const columns = columnsOf(t)
   return (
-    <section aria-label="Últimos backtests" className="overflow-hidden rounded-xl border bg-card text-card-foreground">
+    <section aria-label={t("Últimos backtests", "Latest backtests")} className="overflow-hidden rounded-xl border bg-card text-card-foreground">
       <div
         aria-hidden
         className={`hidden border-b bg-muted/40 px-5 py-3 text-caption font-semibold text-muted-foreground lg:grid ${rowGrid}`}
@@ -79,7 +91,7 @@ function BacktestTable({
             {column}
           </span>
         ))}
-        <span className="hidden text-right xl:block">Curva de capital</span>
+        <span className="hidden text-right xl:block">{t("Curva de capital", "Equity curve")}</span>
         <span className="w-4" />
       </div>
 
@@ -89,8 +101,11 @@ function BacktestTable({
             <BacktestRow backtest={backtest} onOpen={() => onOpen(backtest)} />
             <button
               type="button"
-              aria-label={`Eliminar backtest de ${backtest.symbol}/USDT con ${backtest.strategy.name}`}
-              title="Eliminar del historial"
+              aria-label={t(
+                `Eliminar backtest de ${backtest.symbol}/USDT con ${backtest.strategy.name}`,
+                `Delete backtest of ${backtest.symbol}/USDT with ${backtest.strategy.name}`
+              )}
+              title={t("Eliminar del historial", "Remove from history")}
               onClick={() => onDelete(backtest)}
               className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-down-soft hover:text-down focus-visible:ring-3 focus-visible:ring-ring/30 lg:top-1/2 lg:right-4 lg:-translate-y-1/2"
             >
@@ -104,6 +119,10 @@ function BacktestTable({
 }
 
 function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestRecord; onOpen: () => void }) {
+  const { locale, t } = useI18n()
+  const columns = columnsOf(t)
+  const decimal = numberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const oneDecimal = numberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
   return (
     <button
       type="button"
@@ -123,17 +142,19 @@ function BacktestRow({ backtest: b, onOpen }: { backtest: BacktestRecord; onOpen
               {b.timeframe}
             </Badge>
             <span>
-              {formatDate(b.from)} → {formatDate(b.to)}
+              {formatDate(b.from, locale)} → {formatDate(b.to, locale)}
             </span>
             <span aria-hidden>·</span>
-            <span>Ejecutado el {formatDate(b.executedAt)}</span>
+            <span>
+              {t("Ejecutado el", "Run on")} {formatDate(b.executedAt, locale)}
+            </span>
           </span>
         </div>
       </div>
 
       <dl className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:contents">
         <Metric label={columns[0]}>
-          <PriceChange value={b.stats.returnPct} variant="pill" />
+          <PriceChange value={b.stats.returnPct} variant="pill" locale={locale} />
         </Metric>
         <Metric label={columns[1]}>
           <span className="num font-semibold">−{decimal.format(Math.abs(b.stats.maxDrawdownPct))}%</span>
