@@ -29,6 +29,23 @@ class Settings(BaseSettings):
     # Pause between rounds of `python -m app.sync`.
     sync_interval_seconds: int = 15
 
+    # Candle history: Parquet files in a Cloudflare R2 bucket (S3 API), see services/candle_store.py.
+    # With no endpoint, `CANDLE_LOCAL_DIR` (same layout) is used instead: tests and local dev.
+    r2_endpoint: str | None = None
+    r2_bucket: str = "backtestlab-candles"
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    candle_local_dir: str | None = None
+    # Disk cache of the Parquet files already read (closed months/years never change).
+    candle_cache_dir: str = "/tmp/backtestlab-candles"
+    candle_cache_max_mb: int = 300
+    # How long the file of the month/year in progress is trusted before downloading it again.
+    candle_open_file_ttl_seconds: int = 300
+    # data.binance.vision: static CDN of Binance's historical klines, used by `python -m app.ingest`.
+    binance_vision_url: str = "https://data.binance.vision"
+    # Hot tail of 1m candles kept in Postgres (`candles_recent_1m`).
+    recent_candles_hours: int = 72
+
     # Shared secret the web app sends in `X-Internal-Key` when it proxies a backtest. The web app
     # enforces the user quotas, so `/backtests/run` refuses any caller without it (and, unset,
     # refuses everyone). Generate one with `openssl rand -hex 32` and set the same value in both apps.

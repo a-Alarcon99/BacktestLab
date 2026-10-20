@@ -7,13 +7,13 @@ endpoint is public and exempt from rate limiting.
 import logging
 import threading
 import time
-from datetime import UTC, datetime
 
 from app.core import db
 from app.core.config import get_settings
-from app.services.candles import HOUR, AssetRef, ensure_candles
+from app.services.candles import AssetRef
 from app.services.market_data import ProviderBannedError
 from app.services.quotes import refresh_quotes
+from app.services.recent import sync_recent
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +38,14 @@ def warm_market_data() -> None:
     try:
         with db.connection() as conn:
             refresh_quotes(conn)
-            # Only assets somebody already charted: their stored range just gets extended to now,
-            # so nothing new is downloaded for assets nobody looks at.
+            # Only assets whose R2 history exists: the 1m hot tail is topped up to now.
             assets = [
                 AssetRef(*row)
                 for row in conn.execute(
                     """
-                    select a.id, a.binance_symbol, a.history_since from assets a
-                    where a.is_active
-                      and exists (select 1 from candles_1h c where c.asset_id = a.id)
+                    select a.id, a.binance_symbol, a.history_since, a.candles_until
+                    from assets a
+                    where a.is_active and a.candles_until is not null
                     order by a.id
                     """
                 ).fetchall()
@@ -54,8 +53,7 @@ def warm_market_data() -> None:
             conn.commit()
             for asset in assets:
                 try:
-                    now = datetime.now(UTC)
-                    ensure_candles(conn, asset, now - 2 * HOUR, now)
+                    sync_recent(conn, asset)
                 except ProviderBannedError:
                     conn.rollback()
                     logger.warning("Candle warm-up skipped: Binance has banned this IP")

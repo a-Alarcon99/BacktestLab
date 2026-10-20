@@ -1,0 +1,40 @@
+# Uploads yesterday's 1m candles (and the 15m / 1h derived from them) to Cloudflare R2.
+# Reads data.binance.vision, a static CDN that does not ban shared IPs like the REST API does.
+# Needs these repository secrets: DATABASE_URL, R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID,
+# R2_SECRET_ACCESS_KEY. See docs/06-almacenamiento-datos.md.
+name: candles-daily
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC: Binance has published the previous day by then
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: "Asset symbol (BTC) or Binance pair; empty = all"
+        required: false
+
+concurrency:
+  group: candles-ingest # two runs writing the same Parquet files would overwrite each other
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - run: pip install .
+      - run: python -m app.ingest daily ${{ inputs.symbol }}

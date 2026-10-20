@@ -4,7 +4,6 @@ from contextlib import contextmanager
 from datetime import UTC, date, datetime
 
 import httpx
-import pandas as pd
 import pytest
 
 from app import sync
@@ -48,13 +47,13 @@ def step(monkeypatch):
     return sync.SyncState(), quote_calls, rounds, clock, result
 
 
-def test_quotes_every_round_candles_once_per_closed_hour(step):
+def test_quotes_every_round_candles_once_per_closed_minute(step):
     state, quote_calls, rounds, _, _ = step
     for _ in range(3):
         sync.sync_step(state)
     assert len(quote_calls) == 3
     assert len(rounds) == 1
-    assert state.candles_hour == candles.last_closed_open_time(datetime.now(UTC))
+    assert state.candles_minute == candles.last_closed_open_time(datetime.now(UTC), "1m")
 
 
 def test_failed_candle_round_is_retried_after_a_pause(step):
@@ -63,32 +62,34 @@ def test_failed_candle_round_is_retried_after_a_pause(step):
     sync.sync_step(state)
     sync.sync_step(state)
     assert len(rounds) == 1
-    assert state.candles_hour is None
+    assert state.candles_minute is None
 
     clock[0] += sync.CANDLES_RETRY_SECONDS
     result["ok"] = True
     sync.sync_step(state)
     assert len(rounds) == 2
-    assert state.candles_hour is not None
+    assert state.candles_minute is not None
 
 
 def test_candle_sync_stops_at_an_ip_ban_and_continues_past_other_errors(monkeypatch):
-    conn = FakeConn(rows=[(1, "BTCUSDT", date(2020, 1, 1)), (2, "ETHUSDT", date(2020, 1, 1))])
+    conn = FakeConn(
+        rows=[(1, "BTCUSDT", date(2020, 1, 1), None), (2, "ETHUSDT", date(2020, 1, 1), None)]
+    )
     tried = []
 
     def failing(error):
-        def ensure(_conn, asset, _start, _end):
+        def ensure(_conn, asset):
             tried.append(asset.binance_symbol)
             raise error
 
         return ensure
 
-    monkeypatch.setattr(sync, "ensure_candles", failing(market_data.ProviderBannedError("ban")))
+    monkeypatch.setattr(sync, "sync_recent", failing(market_data.ProviderBannedError("ban")))
     assert sync.sync_candles(conn) is False
     assert tried == ["BTCUSDT"]
 
     tried.clear()
-    monkeypatch.setattr(sync, "ensure_candles", failing(httpx.ConnectError("down")))
+    monkeypatch.setattr(sync, "sync_recent", failing(httpx.ConnectError("down")))
     assert sync.sync_candles(conn) is False
     assert tried == ["BTCUSDT", "ETHUSDT"]
 
@@ -132,62 +133,3 @@ def test_disabled_quotes_and_warmup_do_nothing(fetch_disabled, monkeypatch):
     monkeypatch.setattr(warmup, "_due", fail)
     quotes.ensure_fresh_quotes(None)
     warmup.warm_market_data()
-
-
-CandleConn = FakeConn
-
-
-def _hour_rows(start: str, hours: int):
-    return [
-        (ts.to_pydatetime(), 1.0, 2.0, 0.5, 1.5, 10.0)
-        for ts in pd.date_range(start, periods=hours, freq="1h", tz=UTC)
-    ]
-
-
-ASSET = candles.AssetRef(1, "BTCUSDT", date(2020, 1, 1))
-
-
-def test_provider_failure_serves_stored_candles_without_a_partial_last_one(monkeypatch):
-    def broken(*_):
-        raise httpx.ConnectError("down")
-
-    monkeypatch.setattr(candles, "ensure_candles", broken)
-    conn = CandleConn(_hour_rows("2024-01-01", 10))  # 00:00 .. 09:00 stored
-    df = candles.get_candles(
-        conn,
-        ASSET,
-        "4h",
-        datetime(2024, 1, 1, tzinfo=UTC),
-        datetime(2024, 1, 3, tzinfo=UTC),
-        allow_stale=True,
-    )
-    assert conn.rolled_back == 1
-    # 00-04 and 04-08 are complete; 08-12 only has 2 stored hours and is dropped.
-    assert list(df.index.hour) == [0, 4]
-
-
-def test_provider_failure_raises_without_stale_or_stored_data(monkeypatch):
-    def broken(*_):
-        raise httpx.ConnectError("down")
-
-    monkeypatch.setattr(candles, "ensure_candles", broken)
-    args = (ASSET, "1h", datetime(2024, 1, 1, tzinfo=UTC), datetime(2024, 1, 3, tzinfo=UTC))
-    with pytest.raises(httpx.ConnectError):
-        candles.get_candles(CandleConn(_hour_rows("2024-01-01", 10)), *args)
-    with pytest.raises(httpx.ConnectError):
-        candles.get_candles(CandleConn([]), *args, allow_stale=True)
-
-
-def test_disabled_providers_serve_stored_candles_to_every_caller(fetch_disabled, monkeypatch):
-    def disabled(*_):
-        raise market_data.ProviderDisabledError("off")
-
-    monkeypatch.setattr(candles, "ensure_candles", disabled)
-    df = candles.get_candles(
-        CandleConn(_hour_rows("2024-01-01", 24)),
-        ASSET,
-        "1h",
-        datetime(2024, 1, 1, tzinfo=UTC),
-        datetime(2024, 1, 3, tzinfo=UTC),
-    )
-    assert len(df) == 24

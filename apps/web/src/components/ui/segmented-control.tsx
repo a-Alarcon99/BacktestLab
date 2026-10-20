@@ -10,6 +10,7 @@ function SegmentedControl<T extends string>({
   value,
   onValueChange,
   labels,
+  disabled,
   size = "default",
   label,
   className,
@@ -18,6 +19,8 @@ function SegmentedControl<T extends string>({
   value: T
   onValueChange?: (value: T) => void
   labels?: Partial<Record<T, React.ReactNode>>
+  /** Options that can't be picked right now. */
+  disabled?: readonly T[]
   size?: "sm" | "default"
   label: string
   className?: string
@@ -38,13 +41,14 @@ function SegmentedControl<T extends string>({
             key={option}
             type="button"
             aria-pressed={active}
+            disabled={disabled?.includes(option)}
             onClick={onValueChange && (() => onValueChange(option))}
             className={cn(
               "num inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-semibold [&_svg]:size-3.5 [&_svg]:shrink-0 whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               size === "sm" ? "h-7 px-2.5 text-caption" : "h-9 min-w-11 flex-1 px-3",
               active
                 ? "bg-background text-foreground shadow-sm dark:bg-card"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
             )}
           >
             {labels?.[option] ?? option}

@@ -4,9 +4,10 @@ import pandas as pd
 import pytest
 
 from app.services.candles import (
-    HOUR,
+    BASE_FOR,
+    BASE_STEP,
+    TIMEFRAME_SPAN,
     last_closed_open_time,
-    missing_ranges,
     older_window,
     period_start,
     resample,
@@ -27,12 +28,18 @@ def hourly(start: datetime, hours: int) -> pd.DataFrame:
 
 def test_last_closed_open_time():
     assert last_closed_open_time(dt(2026, 10, 9, 14, 37)) == dt(2026, 10, 9, 13)
+    assert last_closed_open_time(dt(2026, 10, 9, 14, 37, 20), "1m") == dt(2026, 10, 9, 14, 36)
+    assert last_closed_open_time(dt(2026, 10, 9, 14, 37), "15m") == dt(2026, 10, 9, 14, 15)
 
 
 @pytest.mark.parametrize(
     ("timeframe", "expected"),
     [
+        ("1m", dt(2026, 10, 8, 14, 37)),
+        ("5m", dt(2026, 10, 8, 14, 35)),
+        ("30m", dt(2026, 10, 8, 14, 30)),
         ("1h", dt(2026, 10, 8, 14)),
+        ("2h", dt(2026, 10, 8, 14)),
         ("4h", dt(2026, 10, 8, 12)),
         ("1d", dt(2026, 10, 8)),
         ("1w", dt(2026, 10, 5)),  # Monday
@@ -41,26 +48,6 @@ def test_last_closed_open_time():
 )
 def test_period_start(timeframe, expected):
     assert period_start(dt(2026, 10, 8, 14, 37), timeframe) == expected
-
-
-class TestMissingRanges:
-    start, end = dt(2026, 1, 1), dt(2026, 4, 1)
-
-    def test_nothing_stored(self):
-        assert missing_ranges(self.start, self.end, None, None) == [(self.start, self.end)]
-
-    def test_fully_covered(self):
-        assert missing_ranges(self.start, self.end, dt(2025, 1, 1), dt(2026, 5, 1)) == []
-
-    def test_extends_both_edges_only(self):
-        stored_min, stored_max = dt(2026, 2, 1), dt(2026, 3, 1)
-        assert missing_ranges(self.start, self.end, stored_min, stored_max) == [
-            (self.start, stored_min - HOUR),
-            (stored_max + HOUR, self.end),
-        ]
-
-    def test_empty_range(self):
-        assert missing_ranges(self.end, self.start, None, None) == []
 
 
 def test_resample_4h_aggregates_ohlcv():
@@ -122,3 +109,61 @@ class TestOlderWindow:
 
     def test_none_at_start_of_history(self):
         assert older_window(self.history, "1d", 1000, self.history) is None
+
+    def test_minute_timeframes_page_by_their_base_candle(self):
+        start, end = older_window(dt(2026, 6, 1, 12), "5m", 1000, self.history)
+        assert end == dt(2026, 6, 1, 11, 59)  # last 1m candle before the known one
+        assert end - start >= timedelta(days=1)
+
+    def test_thirty_minutes_end_on_a_15m_candle(self):
+        _, end = older_window(dt(2026, 6, 1, 12), "30m", 1000, self.history)
+        assert end == dt(2026, 6, 1, 11, 45)
+
+
+def minutely(start: datetime, minutes: int) -> pd.DataFrame:
+    index = pd.date_range(start, periods=minutes, freq="1min", tz=UTC, name="open_time")
+    n = pd.Series(range(minutes), index=index, dtype=float)
+    return pd.DataFrame(
+        {"open": n, "high": n + 0.5, "low": n - 0.5, "close": n + 0.25, "volume": 1.0}
+    )
+
+
+def test_resample_5m_from_1m():
+    df = resample(minutely(dt(2026, 1, 1), 12), "5m", until=dt(2026, 1, 1, 0, 12))
+    assert list(df.index) == [dt(2026, 1, 1, 0, 0), dt(2026, 1, 1, 0, 5)]  # 00:10 is partial
+    first = df.iloc[0]
+    assert (first.open, first.high, first.low, first.close, first.volume) == (0, 4.5, -0.5, 4.25, 5)
+
+
+def test_resample_3m_from_1m_skips_a_gap():
+    df = pd.concat([minutely(dt(2026, 1, 1), 3), minutely(dt(2026, 1, 1, 0, 9), 3)])
+    out = resample(df, "3m", until=dt(2026, 1, 1, 0, 12))
+    assert list(out.index) == [dt(2026, 1, 1, 0, 0), dt(2026, 1, 1, 0, 9)]
+
+
+def test_resample_30m_from_15m():
+    index = pd.date_range(dt(2026, 1, 1), periods=4, freq="15min", tz=UTC, name="open_time")
+    df = pd.DataFrame(
+        {
+            "open": [1, 2, 3, 4.0],
+            "high": [5, 9, 6, 7.0],
+            "low": [1, 1, 0, 2.0],
+            "close": [2, 3, 4, 5.0],
+            "volume": 1.0,
+        },
+        index=index,
+    )
+    out = resample(df, "30m", until=dt(2026, 1, 1, 1))
+    assert out.high.tolist() == [9, 7] and out.low.tolist() == [1, 0]
+    assert out.open.tolist() == [1, 3] and out.close.tolist() == [3, 5]
+
+
+def test_resample_stored_timeframe_is_passed_through():
+    df = resample(minutely(dt(2026, 1, 1), 5), "1m", until=dt(2026, 1, 1, 0, 4))
+    assert len(df) == 4  # the 5th candle closes after `until`
+
+
+def test_base_for_is_the_largest_stored_timeframe_that_divides_each_one():
+    for tf, base in BASE_FOR.items():
+        assert TIMEFRAME_SPAN[tf] % BASE_STEP[base] == timedelta(0) or tf == "1M"
+        assert base in BASE_STEP

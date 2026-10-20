@@ -8,7 +8,8 @@ Started and stopped by hand (see docs/12-sincronizacion-local.md):
 It writes to the database the deployed API reads, through the API's own functions, so while it runs
 the API finds fresh data and doesn't call the providers itself:
 - quotes (`refresh_quotes`) whenever they are older than `QUOTE_TTL_SECONDS`;
-- the whole 1h history of every active asset at start, then every newly closed hour.
+- the 1m hot tail (`candles_recent_1m`: from the R2 history's end to now) of every asset, once per
+  newly closed minute. The long history is not here: `python -m app.ingest daily` puts it in R2.
 Stopping it mid-download is safe: each asset's candles are committed in one transaction.
 """
 
@@ -26,9 +27,10 @@ from psycopg import Connection
 
 from app.core import db
 from app.core.config import get_settings
-from app.services.candles import AssetRef, ensure_candles, last_closed_open_time
+from app.services.candles import AssetRef, last_closed_open_time
 from app.services.market_data import ProviderBannedError
 from app.services.quotes import refresh_quotes
+from app.services.recent import sync_recent
 
 logger = logging.getLogger("app.sync")
 
@@ -39,27 +41,29 @@ CANDLES_RETRY_SECONDS = 60
 
 @dataclass
 class SyncState:
-    candles_hour: datetime | None = None  # last closed hour whose candles are all stored
+    candles_minute: datetime | None = None  # last closed minute whose candles are all stored
     candles_retry_at: float = 0.0  # monotonic
 
 
 def sync_candles(conn: Connection) -> bool:
-    """Download whatever is missing of each active asset's history, up to the last closed hour.
+    """Top up the 1m hot tail of each active asset up to the last closed minute.
 
     False when some asset failed, so the caller tries the round again later.
     """
     assets = [
         AssetRef(*row)
         for row in conn.execute(
-            "select id, binance_symbol, history_since from assets where is_active order by id"
+            """
+            select id, binance_symbol, history_since, candles_until
+            from assets where is_active order by id
+            """
         ).fetchall()
     ]
     conn.commit()
     ok = True
     for asset in assets:
-        history_start = datetime.combine(asset.history_since, datetime.min.time(), UTC)
         try:
-            ensure_candles(conn, asset, history_start, datetime.now(UTC))
+            sync_recent(conn, asset)
         except ProviderBannedError:
             conn.rollback()
             logger.warning("Binance has banned this IP: candles wait for the ban to end")
@@ -72,18 +76,16 @@ def sync_candles(conn: Connection) -> bool:
 
 
 def sync_step(state: SyncState) -> None:
-    """One round: quotes if stale, candles once per newly closed hour."""
+    """One round: quotes if stale, candles once per newly closed minute."""
     with db.connection() as conn:
         refresh_quotes(conn)  # provider failures are logged and backed off inside
         conn.commit()
 
-        hour = last_closed_open_time(datetime.now(UTC))
-        if hour == state.candles_hour or time.monotonic() < state.candles_retry_at:
+        minute = last_closed_open_time(datetime.now(UTC), "1m")
+        if minute == state.candles_minute or time.monotonic() < state.candles_retry_at:
             return
-        logger.info("Syncing candles up to %s UTC", f"{hour:%Y-%m-%d %H:%M}")
         if sync_candles(conn):
-            state.candles_hour = hour
-            logger.info("Candles up to date")
+            state.candles_minute = minute
         else:
             state.candles_retry_at = time.monotonic() + CANDLES_RETRY_SECONDS
 

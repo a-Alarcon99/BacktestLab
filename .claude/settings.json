@@ -1,16 +1,10 @@
 {
     "permissions": {
-        "allow": [
-
-        ],
-        "ask": [
-            
-        ],
+        "allow": [],
+        "ask": [],
         "deny": [
             "Read(.env)",
-            // "Read(.env.*)",
-            "Edit(.env)",
-            // "Edit(.env.*)"
+            "Edit(.env)"
         ]
     }
 }

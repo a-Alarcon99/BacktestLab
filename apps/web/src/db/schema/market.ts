@@ -37,6 +37,11 @@ export const assets = pgTable("assets", {
   /** Date of the first Binance candle for the pair. */
   historySince: date("history_since").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  /**
+   * Exclusive end of the candle history stored in R2 (Parquet): everything before it is there.
+   * Moved forward by `python -m app.ingest` after uploading; NULL until the first backfill.
+   */
+  candlesUntil: timestamp("candles_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
@@ -58,7 +63,30 @@ export const assetQuotes = pgTable("asset_quotes", {
   marketCapUpdatedAt: timestamp("market_cap_updated_at", { withTimezone: true }),
 }).enableRLS();
 
-/** Closed 1h candles. Higher timeframes are resampled from these in the API. */
+/**
+ * Hot tail: the last ~72 h of closed 1m candles, from `candles_until` up to now (older history is
+ * in R2). Filled by `python -m app.sync`, trimmed as it goes.
+ */
+export const candlesRecent1m = pgTable(
+  "candles_recent_1m",
+  {
+    assetId: integer("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    openTime: timestamp("open_time", { withTimezone: true }).notNull(),
+    open: doublePrecision("open").notNull(),
+    high: doublePrecision("high").notNull(),
+    low: doublePrecision("low").notNull(),
+    close: doublePrecision("close").notNull(),
+    volume: doublePrecision("volume").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.assetId, t.openTime] })],
+).enableRLS();
+
+/**
+ * @deprecated Closed 1h candles, replaced by Parquet files in R2. Kept only to verify the backfill
+ * (`python -m app.ingest verify`); drop the table once the API reads from R2.
+ */
 export const candles1h = pgTable(
   "candles_1h",
   {

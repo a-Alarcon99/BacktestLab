@@ -14,7 +14,13 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 
 # Chart window per timeframe (roughly 100-400 candles). `None` means the whole history of the asset.
 CHART_LOOKBACK: dict[Timeframe, timedelta | None] = {
+    "1m": timedelta(days=1),
+    "3m": timedelta(days=2),
+    "5m": timedelta(days=5),
+    "15m": timedelta(days=7),
+    "30m": timedelta(days=14),
     "1h": timedelta(days=7),
+    "2h": timedelta(days=14),
     "4h": timedelta(days=30),
     "1d": timedelta(days=365),
     "1w": timedelta(days=3 * 365),
@@ -96,7 +102,7 @@ def get_asset_candles(
         lookback = CHART_LOOKBACK[timeframe]
         end = datetime.now(UTC)
         start = end - lookback if lookback else history_start
-    df = get_candles(conn, asset, timeframe, start, end, allow_stale=True)
+    df = get_candles(conn, asset, timeframe, start, end)
     return [
         Candle(time=t, open=r.open, high=r.high, low=r.low, close=r.close, volume=r.volume)
         for t, r in zip(df.index.to_pydatetime(), df.itertuples(index=False), strict=True)
