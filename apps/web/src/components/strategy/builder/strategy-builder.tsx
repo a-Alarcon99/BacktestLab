@@ -11,15 +11,17 @@ import {
   addNode,
   autoWire,
   canConnect,
-  COLUMNS,
+  COLUMN_COUNT,
   connect,
   defaultRow,
   disconnect,
-  levelsOf,
   moveNode,
   removeNode,
+  setMode,
+  shownColumns,
   sideOf,
   updateNode,
+  usedColumns,
   type Graph,
   type GraphNode,
   type NodeData,
@@ -64,12 +66,9 @@ function StrategyBuilder({
   const [connectTarget, setConnectTarget] = useState<string | null>(null)
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
-  const [dragging, setDragging] = useState<{ type: NodeType; fresh: boolean } | null>(null)
 
-  // The panel makes room for the conditions the strategy uses; an AND being dragged in already opens
-  // the next condition column so there is somewhere to drop it.
-  const levels = levelsOf(graph)
-  const viewLevels = dragging?.fresh && dragging.type === "and" ? Math.min(levels + 1, 3) : levels
+  // The panel makes room for the columns the strategy uses, plus a free one to drop nodes in.
+  const columns = shownColumns(graph)
 
   // Window listeners of a press outlive the render that started it: they read the latest graph.
   const latest = useRef({ graph, onChange })
@@ -84,11 +83,9 @@ function StrategyBuilder({
   const overCanvas = (clientX: number, clientY: number) =>
     Boolean(document.elementFromPoint(clientX, clientY)?.closest("[data-canvas]"))
 
-  const cellFor = (type: NodeType, clientX: number, clientY: number, fresh: boolean) => {
-    const base = levelsOf(latest.current.graph)
-    const shown = fresh && type === "and" ? Math.min(base + 1, 3) : base
+  const cellFor = (type: NodeType, clientX: number, clientY: number) => {
     const point = toCanvas(clientX, clientY)
-    return point && overCanvas(clientX, clientY) ? cellAt(type, point.x, point.y, makeLayout(shown)) : null
+    return point && overCanvas(clientX, clientY) ? cellAt(type, point.x, point.y, makeLayout(shownColumns(latest.current.graph))) : null
   }
 
   /** A press that turns into a drag after a few pixels; below that it's a click. */
@@ -106,21 +103,19 @@ function StrategyBuilder({
       window.removeEventListener("pointercancel", finish)
       setLabel(null)
       setGhost(null)
-      setDragging(null)
     }
     const move = (e: PointerEvent) => {
       if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD) return
       dragging = true
-      setDragging({ type, fresh: payload.kind === "new" })
       setSelectedEdge(null)
       setLabel({ text, x: e.clientX, y: e.clientY })
-      const cell = cellFor(type, e.clientX, e.clientY, payload.kind === "new")
+      const cell = cellFor(type, e.clientX, e.clientY)
       setGhost(cell && { type, ...cell })
     }
     const up = (e: PointerEvent) => {
       finish()
       if (!dragging) return onClick()
-      const cell = cellFor(type, e.clientX, e.clientY, payload.kind === "new")
+      const cell = cellFor(type, e.clientX, e.clientY)
       if (!cell) return
       if (payload.kind === "new") latest.current.onChange((g) => withWires(addNode(g, payload.data, cell.col, cell.row, MAX_RULES)))
       else latest.current.onChange((g) => autoWire(moveNode(g, payload.id, cell.col, cell.row), payload.id, MAX_CONDITIONS))
@@ -164,7 +159,8 @@ function StrategyBuilder({
 
   const addFromMenu = (data: NodeData) =>
     onChange((g) => {
-      const col = COLUMNS[data.type][0]
+      // Conditions start at the first column; an action goes right after everything else.
+      const col = data.type === "condition" ? 1 : Math.min(Math.max(usedColumns(g), 2), COLUMN_COUNT - 1)
       return withWires(addNode(g, data, col, defaultRow(g, col), MAX_RULES))
     })
 
@@ -213,24 +209,25 @@ function StrategyBuilder({
           ghost={ghost}
           pending={pending}
           connectTarget={connectTarget}
-          levels={viewLevels}
+          columns={columns}
           canvasRef={canvasRef}
           className="h-[28rem] lg:h-auto lg:min-h-[28rem] lg:flex-1"
           onNodePress={(node, event) => {
             press(event, { kind: "move", id: node.id }, node.type, () => {
-              if (node.type === "condition" || node.type === "amount") setEditing(node.id)
+              if (node.type !== "price") setEditing(node.id)
             })
           }}
           onPortPress={pressPort}
           onActivate={(node) => setEditing(node.id)}
+          onToggleMode={(node) => onChange((g) => setMode(g, node.id, node.mode === "or" ? "and" : "or"))}
           onRemove={remove}
           onEdgeSelect={setSelectedEdge}
           onEdgeRemove={removeEdge}
         />
         <p className="text-caption text-muted-foreground lg:absolute lg:inset-x-0 lg:top-full lg:mt-2">
           {t(
-            "Arrastra componentes al panel y conéctalos desde el punto derecho de cada nodo. Haz clic en una condición o cantidad para editarla. Arrastra el fondo para moverte por el panel.",
-            "Drag components onto the panel and connect them from the right-hand dot of each node. Click a condition or amount to edit it. Drag the background to move around the panel."
+            "Arrastra componentes al panel y conéctalos desde el punto derecho de cada nodo: una regla se dispara cuando se cumplen todas las condiciones conectadas a su compra o venta. Cuando un nodo recibe varias conexiones, el interruptor Y / O de su izquierda decide si deben cumplirse todas o basta una. Haz clic en una condición, compra o venta para editarla. Arrastra el fondo para moverte por el panel.",
+            "Drag components onto the panel and connect them from the right-hand dot of each node: a rule fires when every condition wired to its buy or sell holds. When a node takes several wires, the AND / OR switch on its left decides whether all must hold or any one is enough. Click a condition, buy or sell to edit it. Drag the background to move around the panel."
           )}
         </p>
       </div>
@@ -268,7 +265,7 @@ function StrategyBuilder({
   )
 }
 
-/** Settings of a condition or an amount node. */
+/** Settings of a condition or of a buy/sell (its amount). */
 function NodeEditor({
   node,
   graph,
@@ -287,7 +284,12 @@ function NodeEditor({
   const { locale, t } = useI18n()
   // The side comes from the action the node leads to; a loose node is edited as a buy.
   const side = sideOf(graph, node.id) ?? "buy"
-  const title = node.type === "condition" ? specOf(node.condition).name[locale] : t("Cantidad a ejecutar", "Amount to execute")
+  const title =
+    node.type === "condition"
+      ? specOf(node.condition).name[locale]
+      : node.type === "action" && node.side === "sell"
+        ? t("Venta", "Sell")
+        : t("Compra", "Buy")
   const description =
     node.type === "condition"
       ? t("Se evalúa al cierre de cada vela.", "Evaluated on the close of every candle.")
@@ -317,7 +319,7 @@ function NodeEditor({
             onChange={(condition) => onUpdate({ type: "condition", condition })}
           />
         )}
-        {node.type === "amount" && side === "sell" && (
+        {node.type === "action" && node.side === "sell" && (
           <Field
             label={t("Porcentaje de la posición", "Percentage of the position")}
             htmlFor={`node-${node.id}-value`}
@@ -327,17 +329,17 @@ function NodeEditor({
               id={`node-${node.id}-value`}
               suffix="%"
               value={node.size.value}
-              onValue={(value) => onUpdate({ type: "amount", size: { unit: "pct", value } })}
+              onValue={(value) => onUpdate({ type: "action", size: { unit: "pct", value } })}
             />
           </Field>
         )}
-        {node.type === "amount" && side === "buy" && (
+        {node.type === "action" && node.side === "buy" && (
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("Tipo de cantidad", "Amount type")} htmlFor={`node-${node.id}-unit`}>
               <Select
                 id={`node-${node.id}-unit`}
                 value={node.size.unit}
-                onChange={(event) => onUpdate({ type: "amount", size: { unit: event.target.value as "pct" | "usdt", value: 100 } })}
+                onChange={(event) => onUpdate({ type: "action", size: { unit: event.target.value as "pct" | "usdt", value: 100 } })}
               >
                 <option value="pct">{t("% del efectivo", "% of the cash")}</option>
                 <option value="usdt">{t("Importe fijo en USDT", "Fixed amount in USDT")}</option>
@@ -352,7 +354,7 @@ function NodeEditor({
                 id={`node-${node.id}-value`}
                 suffix={node.size.unit === "pct" ? "%" : "USDT"}
                 value={node.size.value}
-                onValue={(value) => onUpdate({ type: "amount", size: { ...node.size, value } })}
+                onValue={(value) => onUpdate({ type: "action", size: { ...node.size, value } })}
               />
             </Field>
           </div>

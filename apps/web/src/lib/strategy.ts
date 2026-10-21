@@ -12,7 +12,15 @@ export type RuleKind = "indicator" | "price" | "volume" | "periodic" | "pattern"
 type Op = "above" | "below"
 type Direction = "up" | "down"
 
-export type Condition =
+/**
+ * Second level of settings every condition shares (all optional, off when absent): the market
+ * direction it needs (close above/below its EMA of `trendPeriod`, default 50) and how many candles
+ * the signal stays active after it happens (default 1). Not applied to "price since the buy".
+ */
+export type ConditionOptions = { trend?: "up" | "down"; trendPeriod?: number; lasts?: number }
+export const DEFAULT_TREND_PERIOD = 50
+
+export type Condition = (
   | { kind: "rsi"; period: number; op: Op; value: number }
   | { kind: "ma-cross"; ma: "sma" | "ema"; fast: number; slow: number; direction: Direction }
   | { kind: "macd"; fast: number; slow: number; signal: number; direction: Direction }
@@ -27,6 +35,8 @@ export type Condition =
   | { kind: "periodic"; every: "day" | "week" | "month" }
   /** Candlestick pattern completed by the closing candle (see `lib/candle-patterns.ts`). */
   | { kind: "candle-pattern"; pattern: PatternId }
+) &
+  ConditionOptions
 
 export type ConditionKind = Condition["kind"]
 type ConditionOf<K extends ConditionKind> = Extract<Condition, { kind: K }>
@@ -298,9 +308,54 @@ export const conditionSpecs: { [K in ConditionKind]: ConditionSpec<ConditionOf<K
 
 export const conditionKinds = Object.keys(conditionSpecs) as ConditionKind[]
 
-/** The registry entry of a condition, typed for the union. */
-export function specOf(condition: Condition) {
-  return conditionSpecs[condition.kind] as unknown as ConditionSpec<Condition>
+/** The options do not apply to a condition on the price since the buy (the engine checks it order by order). */
+export const takesOptions = (c: Condition) => !(c.kind === "price-change" && c.lookback === "entry")
+
+function optionsKey(c: Condition) {
+  if (!takesOptions(c)) return ""
+  return (c.trend ? `:trend-${c.trend}-${c.trendPeriod ?? DEFAULT_TREND_PERIOD}` : "") + (c.lasts && c.lasts > 1 ? `:lasts-${c.lasts}` : "")
+}
+
+function optionsText(c: Condition, l: Locale) {
+  if (!takesOptions(c)) return ""
+  const parts: string[] = []
+  if (c.trend) {
+    const ema = `EMA ${c.trendPeriod ?? DEFAULT_TREND_PERIOD}`
+    parts.push(l === "en" ? `${c.trend === "up" ? "rising" : "falling"} market (${ema})` : `mercado ${c.trend === "up" ? "alcista" : "bajista"} (${ema})`)
+  }
+  if (c.lasts && c.lasts > 1) parts.push(l === "en" ? `signal active ${c.lasts} candles` : `señal activa ${c.lasts} velas`)
+  return parts.length > 0 ? ` · ${parts.join(" · ")}` : ""
+}
+
+function optionErrors(c: Condition, l: Locale) {
+  if (!takesOptions(c)) return {}
+  const t = translator(l)
+  return errors({
+    trend: c.trend !== undefined && c.trend !== "up" && c.trend !== "down" && t("Dirección no válida", "Invalid direction"),
+    trendPeriod:
+      c.trend !== undefined &&
+      !(Number.isInteger(c.trendPeriod ?? DEFAULT_TREND_PERIOD) && (c.trendPeriod ?? DEFAULT_TREND_PERIOD) >= 2 && (c.trendPeriod ?? DEFAULT_TREND_PERIOD) <= 400) &&
+      t("Entero entre 2 y 400", "Whole number from 2 to 400"),
+    lasts: c.lasts !== undefined && !(Number.isInteger(c.lasts) && c.lasts >= 1 && c.lasts <= 50) && t("Entero entre 1 y 50", "Whole number from 1 to 50"),
+  })
+}
+
+/**
+ * The registry entry of a condition, typed for the union, with the shared options folded in: they
+ * show in its description, make its subject different (so differently configured conditions are not
+ * compared as contradictory) and are validated.
+ */
+export function specOf(condition: Condition): ConditionSpec<Condition> {
+  const base = conditionSpecs[condition.kind] as unknown as ConditionSpec<Condition>
+  return {
+    ...base,
+    describe: (c, l = defaultLocale) => base.describe(c, l) + optionsText(c, l),
+    subject: (c, l = defaultLocale) => {
+      const subject = base.subject(c, l)
+      return { ...subject, key: subject.key + optionsKey(c) }
+    },
+    validate: (c, l = defaultLocale) => ({ ...base.validate(c, l), ...optionErrors(c, l) }),
+  }
 }
 
 /** Default condition of the first kind in a UI family. */

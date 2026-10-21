@@ -9,7 +9,9 @@ import type { Translate } from "@/lib/i18n"
 import {
   conditionKinds,
   conditionSpecs,
+  DEFAULT_TREND_PERIOD,
   periodicLabel,
+  takesOptions,
   type Condition,
   type ConditionKind,
   type RuleKind,
@@ -51,8 +53,8 @@ function ConditionEditor({
   const candles = t("velas", "candles")
   // `set` merges a partial update of the same kind.
   const set = (patch: Partial<Condition>) => onChange({ ...c, ...patch } as Condition)
-  const num = (field: string, label: string, value: number, extra?: { suffix?: string; step?: number }) => (
-    <Field label={label} htmlFor={`${id}-${field}`} hint={<FieldError show error={errors[field]} />}>
+  const num = (field: string, label: string, value: number, extra?: { suffix?: string; step?: number; hint?: string }) => (
+    <Field label={label} htmlFor={`${id}-${field}`} hint={<FieldError show error={errors[field]}>{extra?.hint}</FieldError>}>
       <NumberInput
         id={`${id}-${field}`}
         value={value}
@@ -210,6 +212,38 @@ function ConditionEditor({
       </div>
       )}
       <div className={cn("grid gap-3", fieldsClassName ?? "sm:grid-cols-2 xl:grid-cols-4")}>{fields}</div>
+      {takesOptions(c) && (
+        <fieldset className="flex flex-col gap-3 border-t pt-3">
+          <legend className="sr-only">{t("Ajustes avanzados", "Advanced settings")}</legend>
+          <p className="text-caption font-semibold text-muted-foreground">{t("Ajustes avanzados", "Advanced settings")}</p>
+          <div className={cn("grid gap-3", fieldsClassName ?? "sm:grid-cols-2 xl:grid-cols-4")}>
+            <Field
+              label={t("Dirección del mercado", "Market direction")}
+              htmlFor={`${id}-trend`}
+              hint={t("Alcista: el precio está sobre su media exponencial.", "Rising: the price is above its exponential average.")}
+            >
+              <Select
+                id={`${id}-trend`}
+                value={c.trend ?? "any"}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (value === "any") set({ trend: undefined, trendPeriod: undefined })
+                  else set({ trend: value as "up" | "down", trendPeriod: c.trendPeriod ?? DEFAULT_TREND_PERIOD })
+                }}
+              >
+                <option value="any">{t("Ambas (sin filtro)", "Either (no filter)")}</option>
+                <option value="up">{t("Solo alcista", "Rising only")}</option>
+                <option value="down">{t("Solo bajista", "Falling only")}</option>
+              </Select>
+            </Field>
+            {c.trend && num("trendPeriod", t("Media de tendencia (EMA)", "Trend average (EMA)"), c.trendPeriod ?? DEFAULT_TREND_PERIOD, { suffix: candles })}
+            {num("lasts", t("Señal activa durante", "Signal active for"), c.lasts ?? 1, {
+              suffix: candles,
+              hint: t("1 = solo la vela en que ocurre.", "1 = only the candle it happens on."),
+            })}
+          </div>
+        </fieldset>
+      )}
     </div>
   )
 }

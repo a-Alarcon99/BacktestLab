@@ -11,16 +11,27 @@ from app.services.candles import Timeframe
 Period = Annotated[int, Field(ge=2, le=200)]
 Op = Literal["above", "below"]
 Direction = Literal["up", "down"]
+Trend = Literal["any", "up", "down"]
 
 
-class RsiCondition(CamelModel):
+class ConditionOptions(CamelModel):
+    """Second level of settings every condition shares (all optional, off by default)."""
+
+    # Market direction the condition needs: "up" = close above its EMA(`trend_period`), "down" = below.
+    trend: Trend = "any"
+    trend_period: int = Field(default=50, ge=2, le=400)
+    # The signal stays active for this many candles after it happens (1 = only on that candle).
+    lasts: int = Field(default=1, ge=1, le=50)
+
+
+class RsiCondition(ConditionOptions):
     kind: Literal["rsi"]
     period: Period
     op: Op
     value: float = Field(gt=0, lt=100)
 
 
-class MaCrossCondition(CamelModel):
+class MaCrossCondition(ConditionOptions):
     kind: Literal["ma-cross"]
     ma: Literal["sma", "ema"]
     fast: Period
@@ -34,7 +45,7 @@ class MaCrossCondition(CamelModel):
         return self
 
 
-class MacdCondition(CamelModel):
+class MacdCondition(ConditionOptions):
     kind: Literal["macd"]
     fast: Period
     slow: Period
@@ -48,20 +59,20 @@ class MacdCondition(CamelModel):
         return self
 
 
-class BollingerCondition(CamelModel):
+class BollingerCondition(ConditionOptions):
     kind: Literal["bollinger"]
     period: Period
     std_dev: float = Field(ge=0.5, le=5)
     band: Literal["upper", "lower"]
 
 
-class DonchianCondition(CamelModel):
+class DonchianCondition(ConditionOptions):
     kind: Literal["donchian"]
     period: Period
     direction: Direction
 
 
-class PriceChangeCondition(CamelModel):
+class PriceChangeCondition(ConditionOptions):
     kind: Literal["price-change"]
     direction: Direction
     pct: float = Field(gt=0, le=1000)
@@ -69,14 +80,14 @@ class PriceChangeCondition(CamelModel):
     lookback: Annotated[int, Field(ge=1, le=200)] | Literal["entry"]
 
 
-class VolumeCondition(CamelModel):
+class VolumeCondition(ConditionOptions):
     kind: Literal["volume"]
     op: Op
     multiple: float = Field(gt=0, le=100)
     period: Period
 
 
-class PeriodicCondition(CamelModel):
+class PeriodicCondition(ConditionOptions):
     kind: Literal["periodic"]
     every: Literal["day", "week", "month"]
 
@@ -95,7 +106,7 @@ PatternId = Literal[
 ]
 
 
-class CandlePatternCondition(CamelModel):
+class CandlePatternCondition(ConditionOptions):
     kind: Literal["candle-pattern"]
     # Detectors live in `app/strategies/patterns.py`.
     pattern: PatternId
