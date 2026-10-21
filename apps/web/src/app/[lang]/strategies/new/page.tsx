@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewStrategyPage() {
   const { t, href } = await getI18n();
   return (
-    <div className="container-page flex flex-col gap-6 py-6 lg:gap-8 lg:py-8">
+    <div className="container-page [--container-page:120rem] flex flex-col gap-6 py-6 lg:gap-8 lg:py-8">
       <div className="flex flex-col gap-3">
         <nav aria-label={t("Ruta", "Breadcrumb")} className="flex items-center gap-1 text-caption text-muted-foreground">
           <Link href={href("/strategies")} className="hover:text-foreground">

@@ -63,14 +63,19 @@ Tests (unitarios, sin red ni base de datos) y lint:
 ## Funcionalidades
 
 - **Activos**: catálogo con cotización en vivo (Binance + CoinGecko), gráfico de precio con todo
-  el histórico y temporalidades 1h/4h/1d/1w/1M (solo se almacenan velas de 1h; el resto se
-  remuestrea con pandas).
-- **Estrategias**: reglas de compra/venta con condiciones (indicadores, cruces, patrones de velas)
-  y comprobación de contradicciones. Incluye estrategias predefinidas de solo lectura.
+  el histórico y 11 temporalidades (1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 1d, 1w, 1M). Solo se almacenan
+  velas de 1m, 15m y 1h (Parquet en Cloudflare R2, más la cola de hoy en Postgres); el resto se
+  remuestrea con pandas. Cifras en USD o EUR.
+- **Estrategias**: editor visual por nodos (precio → condiciones unidas con Y → cantidad → compra/venta)
+  con comprobación de contradicciones. Incluye estrategias predefinidas de solo lectura. Se guardan en
+  la base de datos, con cuentas y cuotas por plan.
 - **Backtests**: se ejecutan sobre un rango de fechas y temporalidad con animación de la
-  simulación y estadísticas finales. Las estrategias propias y los últimos 10 backtests se
-  guardan en el `localStorage` del navegador (aún sin login); cada activo muestra su historial
-  y `/backtests` el global.
+  simulación y estadísticas finales. El historial (según el plan) se guarda en el `localStorage` del
+  navegador; cada activo muestra su historial y `/backtests` el global.
+- **Idiomas**: español (URL sin prefijo) e inglés (`/en/...`).
+
+> Documentación detallada en `docs/` (índice en `docs/00-indice.md`). Lo que se usó al principio y ya no
+> se conserva marcado como obsoleto: `docs/17-registro-de-obsolescencias.md`.
 
 ## Conexiones a Supabase
 

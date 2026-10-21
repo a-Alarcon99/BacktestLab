@@ -135,6 +135,8 @@ validación estricta, cabeceras, CORS, `statement_timeout`) sigue vigente y con 
   muchas IPs; no hay prioridad por plan.
 - Las condiciones de las estrategias se validan en la web solo por `kind`; los parámetros los valida el
   motor al ejecutar. Los datos guardados (≤ 64 KB por estrategia) acotan el almacenamiento solo vía cuotas.
+> ⚠️ **OBSOLETO** · el punto siguiente se refiere a `ensure_candles`, que ya no existe (las velas se leen de R2). Se conserva como registro de la auditoría.
+
 - `statement_timeout` de la API solo cubre hasta el primer `commit` de `ensure_candles`.
 - Sin lockfile ni cotas superiores en las dependencias de Python.
 
