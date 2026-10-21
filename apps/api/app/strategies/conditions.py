@@ -139,7 +139,7 @@ def entry_change_matches(c: PriceChangeCondition, change_pct: float) -> bool:
     return change_pct > c.pct if c.direction == "up" else change_pct < -c.pct
 
 
-SPECS: dict[str, ConditionSpec] = {
+_SPECS: dict[str, ConditionSpec] = {
     "rsi": ConditionSpec(
         label=lambda c: f"RSI ({c.period})",
         subject=lambda c: f"rsi:{c.period}",
@@ -215,6 +215,59 @@ SPECS: dict[str, ConditionSpec] = {
         evaluate=lambda df, c: patterns.PATTERNS[c.pattern].detect(df),
     ),
 }
+
+
+def _options_suffix(c: Any) -> str:
+    return (f":trend-{c.trend}-{c.trend_period}" if c.trend != "any" else "") + (
+        f":lasts-{c.lasts}" if c.lasts > 1 else ""
+    )
+
+
+def _options_label(c: Any) -> str:
+    parts = []
+    if c.trend != "any":
+        parts.append(
+            f"mercado {'alcista' if c.trend == 'up' else 'bajista'} (EMA {c.trend_period})"
+        )
+    if c.lasts > 1:
+        parts.append(f"señal activa {c.lasts} velas")
+    return f" · {' · '.join(parts)}" if parts else ""
+
+
+def _with_options(base: ConditionSpec) -> ConditionSpec:
+    """Applies the options every condition shares (`ConditionOptions`) around its own signal.
+
+    The signal is first stretched over `lasts` candles, then filtered by the market direction.
+    Conditions on the price since the entry (`evaluate` is None) run in the engine loop and ignore
+    both. The options are part of the subject, so differently configured conditions are never
+    compared as contradictory.
+    """
+
+    def evaluate(df: pd.DataFrame, c: Any) -> pd.Series | None:
+        signal = base.evaluate(df, c)
+        if signal is None:
+            return None
+        if c.lasts > 1:
+            signal = signal.fillna(False).astype(float).rolling(c.lasts, min_periods=1).max() > 0
+        if c.trend != "any":
+            average = ind.ema(df.close, c.trend_period)
+            signal = signal & ((df.close > average) if c.trend == "up" else (df.close < average))
+        return signal
+
+    def warmup(c: Any) -> int:
+        needed = base.warmup(c) + c.lasts - 1
+        return max(needed, c.trend_period * 3) if c.trend != "any" else needed
+
+    return ConditionSpec(
+        label=lambda c: base.label(c) + _options_label(c),
+        subject=lambda c: base.subject(c) + _options_suffix(c),
+        constraint=base.constraint,
+        warmup=warmup,
+        evaluate=evaluate,
+    )
+
+
+SPECS: dict[str, ConditionSpec] = {kind: _with_options(spec_) for kind, spec_ in _SPECS.items()}
 
 
 def spec(condition: Condition) -> ConditionSpec:

@@ -6,6 +6,7 @@ import pytest
 
 from app.schemas.backtest import StrategyConfig
 from app.strategies import indicators as ind
+from app.strategies.conditions import spec
 from app.strategies.engine import simulate, to_result, warmup_candles
 from app.strategies.validation import find_conflicts
 
@@ -77,6 +78,47 @@ def test_crosses():
     b = pd.Series([2.0, 2, 2, 2, 2])
     assert ind.crosses_above(a, b).tolist() == [False, False, True, False, False]
     assert ind.crosses_below(a, b).tolist() == [False, False, False, False, True]
+
+
+# --- condition options ----------------------------------------------------------------------------
+
+
+def only_condition(**fields):
+    return strategy(rule("buy", fields)).rules[0].conditions[0]
+
+
+def test_lasts_keeps_the_signal_active_for_n_candles():
+    df = candles([100, 100, 90, 90, 90, 90])  # a 5 % drop in one candle, only on the third
+    plain = only_condition(**change("down", 5))
+    assert spec(plain).evaluate(df, plain).tolist() == [False, False, True, False, False, False]
+    longer = only_condition(**change("down", 5), lasts=3)
+    assert spec(longer).evaluate(df, longer).tolist() == [False, False, True, True, True, False]
+    assert spec(longer).warmup(longer) == spec(plain).warmup(plain) + 2
+
+
+def test_trend_filters_by_the_direction_of_the_market():
+    df = candles([100, 110, 120, 130, 120, 110, 100, 90])
+    average = ind.ema(df.close, 2)
+    every_day = {"kind": "periodic", "every": "day"}
+    up = only_condition(**every_day, trend="up", trend_period=2)
+    down = only_condition(**every_day, trend="down", trendPeriod=2)
+    assert spec(up).evaluate(df, up).tolist() == (df.close > average).tolist()
+    assert spec(down).evaluate(df, down).tolist() == (df.close < average).tolist()
+    assert spec(up).warmup(up) >= 6
+
+
+def test_options_are_part_of_the_subject():
+    base = only_condition(**rsi("below", 30))
+    longer = only_condition(**rsi("below", 30), lasts=2)
+    uptrend = only_condition(**rsi("below", 30), trend="up")
+    assert len({spec(c).subject(c) for c in (base, longer, uptrend)}) == 3
+    # a buy and a sell on the same RSI band no longer clash once one of them needs an up-trend
+    clash = strategy(rule("buy", rsi("below", 40)), rule("sell", rsi("above", 30)))
+    assert find_conflicts(clash)
+    apart = strategy(
+        rule("buy", {**rsi("below", 40), "trend": "up"}), rule("sell", rsi("above", 30))
+    )
+    assert not find_conflicts(apart)
 
 
 # --- engine -----------------------------------------------------------------------------------

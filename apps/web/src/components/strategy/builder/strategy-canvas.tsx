@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import { XIcon } from "lucide-react"
 import { cn } from "cn"
 import { useI18n } from "@/components/i18n/locale-provider"
-import { levelsOf, type Graph, type GraphNode, type NodeType } from "@/lib/strategy-graph"
+import { shownColumns, usedColumns, type Graph, type GraphNode, type NodeType } from "@/lib/strategy-graph"
 import { BuilderNode, nodeView } from "./builder-node"
 import { canvasHeight, inPort, makeLayout, MIN_ROWS, nodeBox, outPort, wirePath } from "./builder-layout"
 
@@ -25,13 +25,14 @@ function StrategyCanvas({
   ghost,
   pending,
   connectTarget,
-  levels,
+  columns,
   minRows = MIN_ROWS,
   className,
   canvasRef,
   onNodePress,
   onPortPress,
   onActivate,
+  onToggleMode,
   onRemove,
   onEdgeSelect,
   onEdgeRemove,
@@ -48,8 +49,8 @@ function StrategyCanvas({
   /** Wire being dragged from a port, in canvas coordinates. */
   pending?: { fromId: string; x: number; y: number } | null
   connectTarget?: string | null
-  /** Condition slots the panel makes room for (default: what the graph uses). */
-  levels?: number
+  /** Columns the panel makes room for (default: those in use, plus a free one in the editor). */
+  columns?: number
   /** Rows shown at least (the editor leaves room to place nodes; the read-only view fits its rules). */
   minRows?: number
   className?: string
@@ -57,6 +58,7 @@ function StrategyCanvas({
   onNodePress?: (node: GraphNode, event: React.PointerEvent) => void
   onPortPress?: (node: GraphNode, event: React.PointerEvent) => void
   onActivate?: (node: GraphNode) => void
+  onToggleMode?: (node: GraphNode) => void
   onRemove?: (node: GraphNode) => void
   onEdgeSelect?: (id: string | null) => void
   onEdgeRemove?: (id: string) => void
@@ -66,7 +68,7 @@ function StrategyCanvas({
   const maxRow = Math.max(...graph.nodes.map((n) => n.row), ghost?.row ?? 0)
   const rows = Math.max(minRows, maxRow + (readOnly ? 1 : 2))
   const from = pending ? nodeById.get(pending.fromId) : undefined
-  const layout = makeLayout(levels ?? levelsOf(graph))
+  const layout = makeLayout(columns ?? (readOnly ? usedColumns(graph) : shownColumns(graph)))
   const width = layout.width
 
   // No scrollbars: the panel is moved by dragging its background.
@@ -176,7 +178,17 @@ function StrategyCanvas({
             target={connectTarget === node.id}
             onPress={(event) => onNodePress?.(node, event)}
             onPortPress={(event) => onPortPress?.(node, event)}
-            onActivate={node.type === "condition" || node.type === "amount" ? () => onActivate?.(node) : undefined}
+            inputs={graph.edges.filter((e) => e.to === node.id).length}
+            modeLabel={{
+              and: t("Y", "AND"),
+              or: t("O", "OR"),
+              title: t(
+                "Cómo se combinan las conexiones: Y = deben cumplirse todas, O = basta una",
+                "How the wires combine: AND = all must hold, OR = any one is enough"
+              ),
+            }}
+            onToggleMode={() => onToggleMode?.(node)}
+            onActivate={node.type === "price" ? undefined : () => onActivate?.(node)}
             onRemove={node.type === "price" ? undefined : () => onRemove?.(node)}
             removeLabel={t("Eliminar nodo", "Delete node")}
           />

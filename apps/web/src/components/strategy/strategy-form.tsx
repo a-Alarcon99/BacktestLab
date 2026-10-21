@@ -24,7 +24,7 @@ import {
   type Strategy,
   type StrategyDraft,
 } from "@/lib/strategy"
-import { COLUMNS, graphToRules, PRICE_ID, rulesToGraph, type Graph } from "@/lib/strategy-graph"
+import { COLUMN_COUNT, graphToRules, PRICE_ID, rulesToGraph, type Graph } from "@/lib/strategy-graph"
 import { FieldError, NumberInput } from "./condition-fields"
 import { StrategyBuilder } from "./builder/strategy-builder"
 
@@ -33,7 +33,7 @@ type Draft = { details: Details; graph: Graph }
 
 // The unsaved draft survives a language switch (a full page load) in sessionStorage, and is dropped
 // when the user leaves the editor, saves or discards. NaN (an empty number field) isn't valid JSON.
-const draftKey = (id?: string) => `bl_strategy_draft:${id ?? "new"}`
+const draftKey = (id?: string) => `bl_strategy_draft2:${id ?? "new"}`
 const encode = (value: unknown) => JSON.stringify(value, (_, v) => (typeof v === "number" && Number.isNaN(v) ? "__NaN__" : v))
 const decode = (raw: string) => JSON.parse(raw, (_, v) => (v === "__NaN__" ? NaN : v)) as unknown
 
@@ -45,10 +45,15 @@ function isDraft(value: unknown): value is Draft {
     v.graph.nodes.every(
       (n) =>
         typeof n.id === "string" &&
-        n.type in COLUMNS &&
         Number.isInteger(n.col) &&
+        n.col >= 0 &&
+        n.col < COLUMN_COUNT &&
         Number.isInteger(n.row) &&
-        (n.type !== "condition" || n.condition?.kind in conditionSpecs)
+        (n.mode === undefined || n.mode === "and" || n.mode === "or") &&
+        // drafts from before the AND and amount nodes were removed are dropped
+        (n.type === "price" ||
+          (n.type === "condition" && n.condition?.kind in conditionSpecs) ||
+          (n.type === "action" && (n.side === "buy" || n.side === "sell") && typeof n.size?.value === "number"))
     )
   )
 }
@@ -88,7 +93,7 @@ function StrategyForm({ strategy }: { strategy?: Strategy }) {
 /**
  * Strategy form: the visual rule builder plus name, capital and fee. Creates a new strategy, or
  * edits `strategy` when given. The builder edits a node graph; every complete chain
- * (price → 1–3 conditions → amount → action) is one rule, and rules and conditions can't
+ * (price → 1–3 conditions → buy/sell) is one rule, and rules and conditions can't
  * contradict each other (`findConflicts`). Saved on the server, subject to the plan quota.
  */
 function StrategyEditor({ strategy, saved, storageKey }: { strategy?: Strategy; saved: Draft | null; storageKey: string }) {
@@ -121,14 +126,12 @@ function StrategyEditor({ strategy, saved, storageKey }: { strategy?: Strategy; 
     if (incomplete.length > 0)
       problems.push(
         t(
-          "Hay nodos sin conectar. Cada regla es una cadena: Precio → condición (Y condición) → cantidad → compra o venta.",
-          "Some nodes aren't connected. Each rule is a chain: Price → condition (AND condition) → amount → buy or sell."
+          "Hay nodos sin conectar. Cada compra o venta necesita al menos una condición conectada, y toda condición debe venir del precio.",
+          "Some nodes aren't connected. Each buy or sell needs at least one wired condition, and every condition must come from the price."
         )
       )
-    if (rules.some((r) => r.side === "sell" && r.size.unit !== "pct"))
-      problems.push(t("La cantidad de una venta debe ser un porcentaje.", "A sell amount must be a percentage."))
     return problems
-  }, [incomplete.length, rules, t])
+  }, [incomplete.length, t])
 
   // Node-level feedback for the canvas: conflicts always, missing data after a save attempt.
   const { invalid, dashed, nodeErrors } = useMemo(() => {
@@ -138,7 +141,7 @@ function StrategyEditor({ strategy, saved, storageKey }: { strategy?: Strategy; 
       const part = parts.get(rule.id)
       const ruleErrors = errors.rules[rule.id]
       if (!part || !ruleErrors) continue
-      const nodes = [...part.conditions, part.amount, rule.id]
+      const nodes = [...part.conditions, part.action]
       if (ruleErrors.conflicts.length > 0) nodes.forEach((id) => invalid.add(id))
       if (!submitted) continue
       part.conditions.forEach((id, i) => {
@@ -148,15 +151,13 @@ function StrategyEditor({ strategy, saved, storageKey }: { strategy?: Strategy; 
           nodeErrors.set(id, fields)
         }
       })
-      const sellInUsdt = rule.side === "sell" && rule.size.unit !== "pct"
-      const size = ruleErrors.size ?? (sellInUsdt ? t("En una venta solo se admite %.", "A sell only accepts %.") : undefined)
-      if (size) {
-        invalid.add(part.amount)
-        nodeErrors.set(part.amount, { size })
+      if (ruleErrors.size) {
+        invalid.add(part.action)
+        nodeErrors.set(part.action, { size: ruleErrors.size })
       }
     }
     return { invalid, dashed: new Set(submitted ? incomplete : []), nodeErrors }
-  }, [rules, parts, errors.rules, incomplete, submitted, t])
+  }, [rules, parts, errors.rules, incomplete, submitted])
 
   const buy = rules.filter((r) => r.side === "buy")
   const sell = rules.filter((r) => r.side === "sell")

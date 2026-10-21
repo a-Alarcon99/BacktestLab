@@ -1,34 +1,31 @@
-import { columnsFor, MAX_ROW, type GraphNode, type NodeType } from "@/lib/strategy-graph"
+import { columnsOf, MAX_ROW, type GraphNode, type NodeType } from "@/lib/strategy-graph"
 
 // Geometry of the strategy canvas. Columns are invisible; every node sits in a cell (column × row),
-// so wires and drop targets are computed from these numbers, not from the DOM. The condition
-// columns only take room when the strategy uses them (`levels`, see `levelsOf`): with one condition
-// the panel is price → condition → amount → action.
+// so wires and drop targets are computed from these numbers, not from the DOM. The panel only
+// makes room for the columns the strategy uses plus a free one (`shownColumns`), so a small
+// strategy is a short panel.
 
 export const NODE_H = 88
-export const AND_H = 44
 export const ROW = 112
 export const PAD_X = 40
 export const PAD_Y = 40
 export const GAP = 44
 export const MIN_ROWS = 6
 
-/** Width of each logical column (see `COLUMNS` in lib/strategy-graph.ts). */
-export const colW = [216, 248, 60, 248, 60, 248, 208, 184]
+/** Width of a column: the price's is narrower. */
+export const colW = (col: number) => (col === 0 ? 216 : 248)
 
-export type Layout = { levels: number; colX: (number | undefined)[]; width: number }
+export type Layout = { cols: number; colX: number[]; width: number }
 
-/** Left edge of each visible column for a panel with `levels` condition slots (hidden columns take no room). */
-export function makeLayout(levels: number): Layout {
-  const visible = colW.map((_, col) => col <= 2 * levels - 1 || col >= 6)
+/** Left edge of each of the first `cols` columns. */
+export function makeLayout(cols: number): Layout {
   let x = PAD_X
-  const colX = colW.map((w, col) => {
-    if (!visible[col]) return undefined
+  const colX = Array.from({ length: cols }, (_, col) => {
     const left = x
-    x += w + GAP
+    x += colW(col) + GAP
     return left
   })
-  return { levels, colX, width: x - GAP + PAD_X }
+  return { cols, colX, width: x - GAP + PAD_X }
 }
 
 export const rowCy = (row: number) => PAD_Y + row * ROW + NODE_H / 2
@@ -38,10 +35,8 @@ export type Box = { x: number; y: number; w: number; h: number }
 type Placed = Pick<GraphNode, "type" | "col" | "row">
 
 export function nodeBox(node: Placed, layout: Layout): Box {
-  const h = node.type === "and" ? AND_H : NODE_H
-  // A node is never in a hidden column; fall back to the amount column just in case.
-  const x = layout.colX[node.col] ?? layout.colX[6]!
-  return { x, y: rowCy(node.row) - h / 2, w: colW[node.col], h }
+  const col = Math.min(node.col, layout.cols - 1)
+  return { x: layout.colX[col], y: rowCy(node.row) - NODE_H / 2, w: colW(col), h: NODE_H }
 }
 
 export const inPort = (node: Placed, layout: Layout) => {
@@ -53,11 +48,11 @@ export const outPort = (node: Placed, layout: Layout) => {
   return { x: b.x + b.w, y: b.y + b.h / 2 }
 }
 
-/** Visible cell of a type nearest to a point of the canvas: its own column closest in x, any row. */
+/** Shown cell of a type nearest to a point of the canvas: its own column closest in x, any row. */
 export function cellAt(type: NodeType, x: number, y: number, layout: Layout) {
-  const cols = columnsFor(type, layout.levels)
+  const cols = columnsOf(type).filter((c) => c < layout.cols)
   if (cols.length === 0) return null
-  const center = (c: number) => (layout.colX[c] ?? 0) + colW[c] / 2
+  const center = (c: number) => layout.colX[c] + colW(c) / 2
   const col = cols.reduce((best, c) => (Math.abs(x - center(c)) < Math.abs(x - center(best)) ? c : best))
   const row = Math.min(Math.max(Math.round((y - PAD_Y - NODE_H / 2) / ROW), 0), MAX_ROW)
   return { col, row }

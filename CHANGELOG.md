@@ -1,6 +1,21 @@
 # Changelog
 
-## 0.3.1 — Beta (sin publicar)
+## 0.3.2 — Beta (2026-10-21)
+
+- Editor visual rediseñado: desaparecen los nodos **Y** y **Cantidad**. Un cable significa que se tienen que
+  cumplir ambos: cada compra o venta es una regla y exige **todas** las condiciones conectadas a ella (y las
+  que tengan detrás, hasta 3). La cantidad se ajusta en el propio nodo de compra/venta. Para alternativas se
+  usan varias compras/ventas.
+- Editor visual: una condición puede conectarse a varias condiciones y a varias compras/ventas. Condiciones y
+  compras/ventas se colocan libremente en cualquier columna salvo la primera (la del precio) y los cables van
+  siempre hacia la derecha. Los nodos tienen un color por tipo (precio, condición, compra, venta).
+- Editor visual: cuando un nodo recibe varios cables, en su izquierda aparece un interruptor **Y / O**
+  (todas las conexiones deben cumplirse, o basta una). Las O se guardan como una regla por alternativa.
+- Ajustes avanzados en todas las condiciones: **dirección del mercado** (solo alcista o bajista, según el
+  cierre frente a su EMA, 50 por defecto) y **señal activa durante N velas**. Funcionan también en el motor
+  de backtests. Los borradores sin guardar del editor anterior se descartan.
+
+## 0.3.1 — Beta (2026-10-21)
 
 - Nuevo logo de BacktestLab (cabecera, página 404 e imagen para compartir) y nuevos iconos de pestaña
   (`favicon.ico`, `icon.svg` con modo oscuro, `icon.png`, `apple-icon.png`).
