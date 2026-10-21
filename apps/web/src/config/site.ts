@@ -12,7 +12,7 @@ export const siteConfig = {
     en: "Backtest crypto trading strategies over any date range and timeframe.",
   },
   nav: [
-    { label: { es: "Activos", en: "Assets" }, href: "/" },
+    { label: { es: "Activos", en: "Assets" }, href: "/assets" },
     { label: { es: "Backtests", en: "Backtests" }, href: "/backtests" },
     { label: { es: "Estrategias", en: "Strategies" }, href: "/strategies" },
     { label: { es: "Planes", en: "Plans" }, href: "/plans" },

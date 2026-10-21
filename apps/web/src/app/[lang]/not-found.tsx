@@ -22,7 +22,7 @@ export default async function NotFound() {
         )}
       </p>
       <div className="flex flex-wrap justify-center gap-2">
-        <Link href={href("/")} className={buttonVariants()}>
+        <Link href={href("/assets")} className={buttonVariants()}>
           {t("Ver activos", "View assets")}
         </Link>
         <Link href={href("/strategies")} className={buttonVariants({ variant: "outline" })}>

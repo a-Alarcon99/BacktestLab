@@ -27,7 +27,7 @@ function RecentBacktests() {
           )}
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-2">
-          <Link href={href("/")} className={buttonVariants({ variant: "outline" })}>
+          <Link href={href("/assets")} className={buttonVariants({ variant: "outline" })}>
             {t("Ver activos", "View assets")}
           </Link>
           <Link href={href("/strategies")} className={buttonVariants()}>
