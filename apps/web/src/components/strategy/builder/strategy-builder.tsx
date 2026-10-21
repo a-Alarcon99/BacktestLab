@@ -197,10 +197,14 @@ function StrategyBuilder({
   const editingNode = graph.nodes.find((n) => n.id === editing)
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-      <BuilderMenu press={press} onAdd={addFromMenu} />
+    <div className="grid gap-4 lg:flex-1 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      {/* The menu scrolls inside the height of the panel, so a longer menu never makes the panel taller. */}
+      <div className="relative">
+        <BuilderMenu press={press} onAdd={addFromMenu} />
+      </div>
 
-      <div className="flex min-w-0 flex-col gap-2">
+      {/* On desktop the panel ends level with the summary card: it stretches to the row and the hint hangs below it. */}
+      <div className="relative flex min-w-0 flex-col gap-2 lg:self-stretch">
         <StrategyCanvas
           graph={graph}
           invalid={invalid}
@@ -211,7 +215,7 @@ function StrategyBuilder({
           connectTarget={connectTarget}
           levels={viewLevels}
           canvasRef={canvasRef}
-          className="h-[28rem] lg:h-[58dvh] lg:min-h-[28rem]"
+          className="h-[28rem] lg:h-auto lg:min-h-[28rem] lg:flex-1"
           onNodePress={(node, event) => {
             press(event, { kind: "move", id: node.id }, node.type, () => {
               if (node.type === "condition" || node.type === "amount") setEditing(node.id)
@@ -223,7 +227,7 @@ function StrategyBuilder({
           onEdgeSelect={setSelectedEdge}
           onEdgeRemove={removeEdge}
         />
-        <p className="text-caption text-muted-foreground">
+        <p className="text-caption text-muted-foreground lg:absolute lg:inset-x-0 lg:top-full lg:mt-2">
           {t(
             "Arrastra componentes al panel y conéctalos desde el punto derecho de cada nodo. Haz clic en una condición o cantidad para editarla. Arrastra el fondo para moverte por el panel.",
             "Drag components onto the panel and connect them from the right-hand dot of each node. Click a condition or amount to edit it. Drag the background to move around the panel."

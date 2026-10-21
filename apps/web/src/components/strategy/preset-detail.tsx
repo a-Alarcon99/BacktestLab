@@ -29,7 +29,7 @@ function PresetDetail({ id }: { id: string }) {
     )
   }
 
-  const graph = rulesToGraph(strategy.rules)
+  const graph = rulesToGraph(strategy.rules, 0)
 
   return (
     <>

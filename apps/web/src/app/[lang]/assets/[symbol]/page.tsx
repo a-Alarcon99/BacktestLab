@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ChevronRightIcon, FlaskConicalIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { AssetBacktests } from "@/components/backtest/asset-backtests";
 import { BacktestConfig } from "@/components/backtest/backtest-config";
-import { GoToBacktestButton } from "@/components/backtest/go-to-backtest-button";
 import { RunBacktestButton } from "@/components/backtest/run-backtest-button";
 import { AssetHeader, AssetIdentity } from "@/components/market/asset-header";
 import { AssetViewProvider } from "@/components/market/asset-view";
@@ -114,13 +113,6 @@ async function AssetContent({ info }: { info: AssetInfo }) {
           <Suspense fallback={<QuoteSkeleton info={info} />}>
             <AssetQuote info={info} locale={locale} />
           </Suspense>
-
-          <div className="hidden gap-2 lg:flex">
-            <GoToBacktestButton>
-              <FlaskConicalIcon data-icon="inline-start" />
-              {t("Configurar backtest", "Set up backtest")}
-            </GoToBacktestButton>
-          </div>
 
           <Suspense fallback={<AssetStats info={info} locale={locale} />}>
             <LiveAssetStats info={info} locale={locale} />

@@ -2,7 +2,7 @@ import type { Condition, OrderSize, Rule, RuleSide } from "./strategy.ts"
 
 // Node graph behind the visual strategy builder (components/strategy/builder). The saved model is
 // still `Rule[]`: every chain  price → condition (→ AND → condition)* → amount → action  is one rule
-// (`graphToRules`; an AND or an amount with several wires gives one rule per path) and every rule can be laid out again as a chain (`rulesToGraph`). Positions are
+// (`graphToRules`; the conditions wired into an AND all belong to the rule, several conditions into an amount or out of an AND give one rule each) and every rule can be laid out again as a chain (`rulesToGraph`). Positions are
 // only used by the editor. Type-only imports keep this module free of the app's `@/` alias, so
 // `node --test` can load it.
 
@@ -48,13 +48,16 @@ export function emptyGraph(): Graph {
   return { nodes: [{ id: PRICE_ID, type: "price", col: 0, row: 1 }], edges: [] }
 }
 
-/** Lays rules out as chains, one row each, in the order given. Ids are deterministic. */
-export function rulesToGraph(rules: Rule[]): Graph {
+/**
+ * Lays rules out as chains, one row each, in the order given, from row `firstRow` (the editor leaves
+ * row 0 free; a read-only view starts at 0). Ids are deterministic.
+ */
+export function rulesToGraph(rules: Rule[], firstRow = 1): Graph {
   if (rules.length === 0) return emptyGraph()
-  const nodes: GraphNode[] = [{ id: PRICE_ID, type: "price", col: 0, row: 1 + Math.floor((rules.length - 1) / 2) }]
+  const nodes: GraphNode[] = [{ id: PRICE_ID, type: "price", col: 0, row: firstRow + Math.floor((rules.length - 1) / 2) }]
   const edges: GraphEdge[] = []
   rules.forEach((rule, index) => {
-    const row = index + 1
+    const row = index + firstRow
     let previous = PRICE_ID
     const link = (to: string) => {
       edges.push({ id: `${previous}>${to}`, from: previous, to })
@@ -87,44 +90,76 @@ export type GraphRules = {
   parts: Map<string, { conditions: string[]; amount: string }>
 }
 
-/** Conditions in a rule, and paths read at most (a graph with many forks can multiply them). */
+/** Conditions a rule can hold. */
 const PATH_CONDITIONS = 3
+
 const MAX_PATHS = 200
 
+type Cond = Extract<GraphNode, { type: "condition" }>
+
 /**
- * Reads every complete path price → condition (→ AND → condition)* → amount → action as one rule. An
- * AND or an amount with several wires gives one rule per path, so they share the nodes they have in
- * common. The first path of an action keeps its id; the others get `<id>~<n>`. Ordered by action row.
+ * What a condition needs to fire: the conditions that must all hold (in reading order) and the nodes
+ * (conditions and ANDs) that make that up, or `null` when it isn't wired back to the price. An AND
+ * needs *every* condition wired into it, plus the one it feeds: two in and two out are two rules
+ * (`A+B+C`, `A+B+D`), not four. A condition has a single wire in, so there is a single answer.
+ */
+function requirements(graph: Graph, node: GraphNode, guard = 0): { conditions: Cond[]; nodes: string[] } | null {
+  if (guard > 24) return null
+  const into = graph.edges.filter((e) => e.to === node.id).flatMap((e) => (byId(graph, e.from) ? [byId(graph, e.from)!] : []))
+  if (node.type === "condition") {
+    const source = into[0]
+    if (!source) return null
+    let before: { conditions: Cond[]; nodes: string[] } | null = { conditions: [], nodes: [] }
+    if (source.type === "and") before = requirements(graph, source, guard + 1)
+    else if (source.type !== "price") return null
+    if (!before) return null
+    return { conditions: [...before.conditions, node], nodes: [...before.nodes, node.id] }
+  }
+  if (node.type !== "and" || into.length === 0) return null
+  const conditions: Cond[] = []
+  const nodes = [node.id]
+  for (const input of [...into].sort((x, y) => x.row - y.row)) {
+    if (input.type !== "condition") return null
+    const part = requirements(graph, input, guard + 1)
+    if (!part) return null
+    for (const c of part.conditions) if (!conditions.includes(c)) conditions.push(c)
+    nodes.push(...part.nodes)
+  }
+  return { conditions, nodes }
+}
+
+/**
+ * Reads every complete chain price → condition (→ AND → condition)* → amount → action as one rule.
+ * An AND is a real "and": the conditions wired into it all belong to every rule that leaves it. Only
+ * several conditions into one amount, or several conditions out of an AND, give several rules. The
+ * first rule of an action keeps its id; the others get `<id>~<n>`. Ordered by action row.
  */
 export function graphToRules(graph: Graph): GraphRules {
-  const outs = (id: string) =>
-    graph.edges.flatMap((e) => (e.from === id ? [byId(graph, e.to)] : [])).filter((n): n is GraphNode => n !== undefined)
-  const found: { action: Extract<GraphNode, { type: "action" }>; amount: Extract<GraphNode, { type: "amount" }>; conditions: Extract<GraphNode, { type: "condition" }>[]; path: string[] }[] = []
-
-  const walk = (node: GraphNode, conditions: Extract<GraphNode, { type: "condition" }>[], path: string[]) => {
-    if (found.length >= MAX_PATHS || path.length > 24) return
-    const here = [...path, node.id]
-    if (node.type === "condition") {
-      if (conditions.length >= PATH_CONDITIONS) return
-      for (const next of outs(node.id)) if (next.type === "and" || next.type === "amount") walk(next, [...conditions, node], here)
-    } else if (node.type === "and") {
-      for (const next of outs(node.id)) if (next.type === "condition") walk(next, conditions, here)
-    } else if (node.type === "amount") {
-      for (const next of outs(node.id)) if (next.type === "action") found.push({ action: next, amount: node, conditions, path: [...here, next.id] })
+  const found: { action: Extract<GraphNode, { type: "action" }>; amount: Extract<GraphNode, { type: "amount" }>; conditions: Cond[]; used: string[] }[] = []
+  for (const amount of graph.nodes) {
+    if (amount.type !== "amount") continue
+    const action = graph.edges.flatMap((e) => (e.from === amount.id ? [byId(graph, e.to)] : [])).find((n) => n?.type === "action")
+    if (action?.type !== "action") continue
+    for (const edge of graph.edges) {
+      if (edge.to !== amount.id) continue
+      const last = byId(graph, edge.from)
+      if (last?.type !== "condition") continue
+      const needs = requirements(graph, last)
+      if (!needs || needs.conditions.length > PATH_CONDITIONS || found.length >= MAX_PATHS) continue
+      found.push({ action, amount, conditions: needs.conditions, used: [...needs.nodes, amount.id, action.id] })
     }
   }
-  for (const start of outs(PRICE_ID)) if (start.type === "condition") walk(start, [], [])
 
-  found.sort((a, b) => a.action.row - b.action.row || a.action.col - b.action.col)
+  found.sort((a, b) => a.action.row - b.action.row || a.action.col - b.action.col || a.conditions[a.conditions.length - 1].row - b.conditions[b.conditions.length - 1].row)
   const parts = new Map<string, { conditions: string[]; amount: string }>()
   const used = new Set<string>()
   const count = new Map<string, number>()
-  const rules = found.map(({ action, amount, conditions, path }) => {
+  const rules = found.map(({ action, amount, conditions, used: nodes }) => {
     const n = count.get(action.id) ?? 0
     count.set(action.id, n + 1)
     const id = n === 0 ? action.id : `${action.id}~${n}`
     parts.set(id, { conditions: conditions.map((c) => c.id), amount: amount.id })
-    path.forEach((p) => used.add(p))
+    nodes.forEach((p) => used.add(p))
     return { id, side: action.side, conditions: conditions.map((c) => c.condition), size: amount.size }
   })
   const incomplete = graph.nodes.filter((n) => n.type !== "price" && !used.has(n.id)).map((n) => n.id)
@@ -153,12 +188,18 @@ export function addNode(graph: Graph, data: NodeData, col: number, row: number, 
   return { graph: arrange({ ...graph, nodes: [...graph.nodes, node] }), id }
 }
 
-/** Moves a node to a column of its type and the nearest free row (wired nodes snap back to their chain column). */
+/**
+ * Moves a node to a column of its type and the nearest free row (wired nodes snap back to their chain
+ * column). A condition dropped in another condition column is taken out of its chain (its wires in
+ * and to ANDs are removed, the one to an amount stays), so it can be wired again at its new depth.
+ */
 export function moveNode(graph: Graph, id: string, col: number, row: number): Graph {
   const node = byId(graph, id)
   if (!node || !COLUMNS[node.type].includes(col)) return graph
   const placed = freeRow(graph, col, row, id)
-  return arrange({ ...graph, nodes: graph.nodes.map((n) => (n.id === id ? { ...n, col, row: placed } : n)) })
+  const detach = node.type === "condition" && node.col !== col
+  const edges = detach ? graph.edges.filter((e) => e.to !== id && !(e.from === id && byId(graph, e.to)?.type === "and")) : graph.edges
+  return arrange({ edges, nodes: graph.nodes.map((n) => (n.id === id ? { ...n, col, row: placed } : n)) })
 }
 
 /** Edits the data of a node (a condition, an amount…). */
@@ -191,7 +232,7 @@ function chainConditions(graph: Graph, node: GraphNode, dir: "back" | "forward",
   return best + (node.type === "condition" ? 1 : 0)
 }
 
-/** Types that take several wires in (an AND, an amount) or give several out (the price, an AND). */
+/** Types that take several wires in (an AND, an amount) or give several out (the price, an AND; a condition only to ANDs). */
 const MANY_IN: NodeType[] = ["and", "amount"]
 const MANY_OUT: NodeType[] = ["price", "and"]
 
@@ -213,11 +254,13 @@ export function canConnect(graph: Graph, fromId: string, toId: string, max: numb
       if (other && chainConditions(graph, other, "back") !== depth) return false
     }
   }
-  return true
+  // Every rule can hold `max` conditions: an AND adds all the conditions wired into it.
+  const wired = { ...graph, edges: [...graph.edges, { id: "?", from: fromId, to: toId }] }
+  return wired.nodes.every((n) => n.type !== "condition" || (requirements(wired, n)?.conditions.length ?? 0) <= max)
 }
 
 /**
- * Adds a wire. Conditions, the amount and the action take one wire out or in; the price and an AND
+ * Adds a wire. Conditions, the amount and the action take one wire in; a condition gives one wire out to an amount and any number to ANDs; the price and an AND
  * can give several out, an AND and an amount can take several in. A wire on a single-wire port is replaced.
  * A fixed amount that ends up feeding a sell becomes a percentage (sells only accept %).
  */
@@ -225,7 +268,9 @@ export function connect(graph: Graph, fromId: string, toId: string, max: number)
   if (!canConnect(graph, fromId, toId, max)) return graph
   const from = byId(graph, fromId)!
   const to = byId(graph, toId)!
-  const edges = graph.edges.filter((e) => (MANY_IN.includes(to.type) || e.to !== toId) && (MANY_OUT.includes(from.type) || e.from !== fromId))
+  // A condition may feed several ANDs plus one amount: a new wire only replaces one of the same kind.
+  const sameOut = (e: GraphEdge) => e.from === fromId && (from.type !== "condition" || byId(graph, e.to)?.type === to.type)
+  const edges = graph.edges.filter((e) => (MANY_IN.includes(to.type) || e.to !== toId) && (MANY_OUT.includes(from.type) || (from.type === "condition" && to.type === "and") || !sameOut(e)))
   const sellInUsdt = from.type === "amount" && from.size.unit !== "pct" && to.type === "action" && to.side === "sell"
   const nodes = sellInUsdt ? graph.nodes.map((n) => (n.id === fromId ? { ...n, size: { unit: "pct", value: 100 } } : n)) : graph.nodes
   return arrange({ nodes: nodes as GraphNode[], edges: [...edges, { id: newId(), from: fromId, to: toId }] })

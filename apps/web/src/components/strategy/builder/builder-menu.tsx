@@ -62,7 +62,7 @@ function BuilderMenu({ press, onAdd }: { press: PressHandler; onAdd: (data: Node
   const { t } = useI18n()
   const sections = useSections()
   return (
-    <Card className="lg:sticky lg:top-[calc(var(--spacing-header)+1rem)] lg:max-h-[calc(100dvh-var(--spacing-header)-2rem)] lg:overflow-y-auto">
+    <Card className="lg:absolute lg:inset-0 lg:overflow-y-auto">
       <CardHeader>
         <CardTitle>{t("Componentes", "Components")}</CardTitle>
       </CardHeader>

@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { ActivityIcon } from "lucide-react"
 import { siteConfig } from "@/config/site"
 import { getI18n } from "@/lib/i18n-server"
 import { CurrencySwitcher } from "./currency-switcher"
@@ -18,9 +17,8 @@ export async function SiteHeader() {
     <header className="sticky top-0 z-50 h-header border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/75">
       <div className="container-page flex h-full items-center gap-6">
         <Link href={href("/")} className="flex shrink-0 items-center gap-2 text-title font-bold tracking-tight">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ActivityIcon className="size-4.5" />
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static SVG, black on transparent: inverted in dark mode */}
+          <img src="/favicon.svg" alt="" width={36} height={36} className="size-9 dark:invert" />
           {siteConfig.name}
         </Link>
 
