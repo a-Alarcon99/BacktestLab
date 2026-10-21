@@ -28,7 +28,7 @@ export default async function BacktestsPage() {
           </p>
         </div>
         <Link
-          href={href("/")}
+          href={href("/assets")}
           className={buttonVariants({ size: "lg", variant: "soft", className: "self-start sm:self-auto" })}
         >
           <FlaskConicalIcon data-icon="inline-start" />

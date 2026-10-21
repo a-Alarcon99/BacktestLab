@@ -76,6 +76,16 @@
   --text-heading--line-height: 2rem;
   --text-price: 2rem;
   --text-price--line-height: 2.5rem;
+
+  /* Marketing type (landing only) */
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.75rem;
+  --text-section: 1.75rem;
+  --text-section--line-height: 2.25rem;
+  --text-display: 2.375rem;
+  --text-display--line-height: 2.75rem;
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 3.875rem;
 }
 
 :root {
@@ -178,6 +188,19 @@
   }
 }
 
+/* Landing hero backdrop: hairline grid fading out from the top, with a faint brand glow. */
+@utility bg-hero {
+  background-image:
+    radial-gradient(60% 55% at 70% 0%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%),
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    48px 48px,
+    48px 48px;
+  mask-image: linear-gradient(to bottom, black 55%, transparent);
+}
+
 /* Aligned figures for prices, percentages and table columns. */
 @utility num {
   font-variant-numeric: tabular-nums;
@@ -217,5 +240,262 @@
   }
   ::selection {
     @apply bg-primary/20;
+  }
+}
+
+/*
+ * Landing animations (components/landing). Elements animate with inline `animation` shorthands
+ * that name these keyframes; their own styles are always the FINAL frame, so turning animations
+ * off (reduced motion, "explore" mode of the replay) leaves the finished picture.
+ */
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scaleY(0.4);
+  }
+}
+@keyframes lp-slide {
+  from {
+    transform: translateX(var(--lp-from, 0));
+  }
+  to {
+    transform: translateX(var(--lp-to, 0));
+  }
+}
+@keyframes lp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes lp-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes lp-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes lp-ripple {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+  }
+}
+@keyframes lp-flash {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes lp-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  15% {
+    opacity: 1;
+    transform: none;
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-12px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+@keyframes lp-window {
+  0% {
+    opacity: 0;
+    transform: translateY(70%);
+  }
+  6%,
+  94% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-70%);
+  }
+}
+@keyframes lp-enter {
+  from {
+    opacity: 0;
+    transform: translateY(70%);
+  }
+}
+@keyframes lp-draw {
+  from {
+    stroke-dashoffset: var(--lp-length);
+  }
+}
+@keyframes lp-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.8);
+  }
+}
+@keyframes lp-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-3px);
+  }
+  40%,
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+/* M3 (conflict-art): one 6 s loop shared by every piece. */
+@keyframes lp-conflict-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  22% {
+    opacity: 1;
+    transform: none;
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  28% {
+    transform: translateX(3px);
+  }
+  31%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  95%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+@keyframes lp-conflict-right {
+  0% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  22% {
+    opacity: 1;
+    transform: none;
+  }
+  25% {
+    transform: translateX(3px);
+  }
+  28% {
+    transform: translateX(-3px);
+  }
+  31%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  95%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+}
+@keyframes lp-conflict-border {
+  0%,
+  23% {
+    border-color: var(--border-strong);
+  }
+  29%,
+  100% {
+    border-color: var(--chart-3);
+  }
+}
+@keyframes lp-conflict-join {
+  0%,
+  14% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  21% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  26%,
+  86% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  95%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes lp-conflict-warn {
+  0%,
+  32% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  40%,
+  86% {
+    opacity: 1;
+    transform: none;
+  }
+  95%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.lp-box {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+[data-paused="true"] * {
+  animation-play-state: paused !important;
+}
+[data-explore="true"] .lp-anim {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-anim {
+    animation: none !important;
+    transition: none !important;
   }
 }

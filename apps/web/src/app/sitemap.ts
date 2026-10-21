@@ -9,7 +9,8 @@ import { absoluteUrl } from "@/lib/seo"
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const catalog = await getAssetCatalog()
   const pages: { path: string; priority: number; changeFrequency: "daily" | "weekly" | "monthly" }[] = [
-    { path: "/", priority: 1, changeFrequency: "daily" },
+    { path: "/", priority: 1, changeFrequency: "weekly" },
+    { path: "/assets", priority: 0.9, changeFrequency: "daily" },
     { path: "/strategies", priority: 0.8, changeFrequency: "weekly" },
     ...Object.keys(presetInfo).map((id) => ({
       path: `/strategies/${id}`,

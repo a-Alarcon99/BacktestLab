@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 — Beta (2026-10-21)
+
+- Nueva página principal (`/`): una landing de 7 secciones (portada, cifras del producto, cómo funciona,
+  análisis, estrategias predefinidas, funciones avanzadas y «Empieza gratis» con preguntas frecuentes y
+  llamada final). Datos estructurados `WebApplication` y `FAQPage`.
+- Animaciones propias, todas con **resultados reales** del motor sobre BTC (con periodo y comisiones
+  indicados): replay interactivo de un backtest en la portada (al pasar el cursor se explora vela a vela),
+  editor visual que se construye solo con interruptor **Y / O** pulsable, y «Un backtest, cuatro capas»:
+  precio y operaciones, resultado por operación, curva de capital y drawdown desplegados en 3D, con un
+  corte que se puede mover con el cursor o el dedo. Además, contadores, patrones de velas y el aviso de
+  condiciones contradictorias. Solo se reproducen en pantalla y con «reducir movimiento» muestran el
+  fotograma final.
+- Las cifras de las animaciones salen de `python -m app.landing_snapshot` (API), que ejecuta las
+  estrategias predefinidas con el motor y escribe `apps/web/src/lib/landing/snapshot.json`. La landing
+  queda prerenderizada y no llama a la API. Los límites de invitado y cuenta gratis se leen de `plans`.
+- El catálogo de activos se mueve a **`/assets`**: menú, migas de pan, enlaces internos y `sitemap.xml`.
+- Las fechas de la landing se escriben sin `Intl`, para que servidor y navegador generen el mismo texto
+  (evita errores de hidratación).
+
 ## 0.3.2 — Beta (2026-10-21)
 
 - Editor visual rediseñado: desaparecen los nodos **Y** y **Cantidad**. Un cable significa que se tienen que

@@ -86,7 +86,7 @@ async function AssetContent({ info }: { info: AssetInfo }) {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: t("Activos", "Assets"), item: absoluteUrl(href("/")) },
+      { "@type": "ListItem", position: 1, name: t("Activos", "Assets"), item: absoluteUrl(href("/assets")) },
       {
         "@type": "ListItem",
         position: 2,
@@ -103,7 +103,7 @@ async function AssetContent({ info }: { info: AssetInfo }) {
         {/* Asset panel: first block on mobile, sticky column on desktop */}
         <aside className="flex flex-col gap-6 lg:sticky lg:top-[calc(var(--spacing-header)+2rem)] lg:self-start">
           <nav aria-label={t("Ruta", "Breadcrumb")} className="flex items-center gap-1 text-caption text-muted-foreground">
-            <Link href={href("/")} className="hover:text-foreground">
+            <Link href={href("/assets")} className="hover:text-foreground">
               {t("Activos", "Assets")}
             </Link>
             <ChevronRightIcon className="size-3" />
