@@ -15,6 +15,7 @@ function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel,
   onConfirm,
 }: {
   open: boolean
@@ -22,6 +23,7 @@ function ConfirmDialog({
   title: string
   description: React.ReactNode
   confirmLabel?: string
+  cancelLabel?: string
   onConfirm: () => void
 }) {
   const { t } = useI18n()
@@ -40,7 +42,7 @@ function ConfirmDialog({
         </header>
         <footer className="flex flex-col-reverse gap-2 px-4 py-3 sm:flex-row sm:justify-end md:px-5">
           <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>
-            {t("Cancelar", "Cancel")}
+            {cancelLabel ?? t("Cancelar", "Cancel")}
           </Button>
           <Button
             variant="destructive"

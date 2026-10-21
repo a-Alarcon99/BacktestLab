@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
 /** `params` is URL data: it is resolved inside <Suspense> so the shell can be served instantly. */
 export default function EditStrategyPage({ params }: PageProps<"/[lang]/strategies/[id]/edit">) {
   return (
-    <div className="container-page flex flex-col gap-6 py-6 lg:gap-8 lg:py-8">
+    <div className="container-page [--container-page:120rem] flex flex-col gap-6 py-6 lg:gap-8 lg:py-8">
       <Suspense fallback={<div aria-hidden className="h-96 animate-pulse rounded-lg bg-muted/40" />}>
         <EditStrategyContent params={params} />
       </Suspense>

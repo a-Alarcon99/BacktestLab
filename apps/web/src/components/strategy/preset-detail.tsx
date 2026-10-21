@@ -2,15 +2,14 @@
 
 import Link from "next/link"
 import { ChevronRightIcon, LockIcon } from "lucide-react"
-import { cn } from "cn"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getPreset, presetInfo } from "@/lib/preset-strategies"
 import { numberFormat } from "@/lib/format"
-import { conditionSpecs, describeSize, specOf, type Rule } from "@/lib/strategy"
-import { ruleKinds } from "./rule-kind"
+import { rulesToGraph } from "@/lib/strategy-graph"
+import { StrategyCanvas } from "./builder/strategy-canvas"
 
 /** Read-only view of a built-in strategy: its settings, rules and the reasoning behind them. */
 function PresetDetail({ id }: { id: string }) {
@@ -30,8 +29,7 @@ function PresetDetail({ id }: { id: string }) {
     )
   }
 
-  const buy = strategy.rules.filter((r) => r.side === "buy")
-  const sell = strategy.rules.filter((r) => r.side === "sell")
+  const graph = rulesToGraph(strategy.rules)
 
   return (
     <>
@@ -68,10 +66,15 @@ function PresetDetail({ id }: { id: string }) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <RuleGroup title={t("Reglas de compra", "Buy rules")} rules={buy} />
-        <RuleGroup title={t("Reglas de venta", "Sell rules")} rules={sell} />
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("Reglas", "Rules")}</CardTitle>
+          <Badge variant="outline">{t("Solo lectura", "Read-only")}</Badge>
+        </CardHeader>
+        <CardContent>
+          <StrategyCanvas graph={graph} readOnly minRows={1} className="max-h-[40rem] border-0" />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -106,53 +109,6 @@ function Setting({ label, value }: { label: string; value: string }) {
       <span className="text-caption text-muted-foreground">{label}</span>
       <span className="num font-semibold">{value}</span>
     </div>
-  )
-}
-
-function RuleGroup({ title, rules }: { title: string; rules: Rule[] }) {
-  const { locale, t } = useI18n()
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="flex flex-col gap-4">
-          {rules.map((rule) => {
-            const { Icon, label } = ruleKinds[specOf(rule.conditions[0]).family]
-            return (
-              <li key={rule.id} className="flex items-start gap-3">
-                <span
-                  className={cn(
-                    "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md",
-                    rule.side === "buy" ? "bg-up-soft text-up" : "bg-down-soft text-down"
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  <span className="sr-only">{label[locale]}</span>
-                </span>
-                <div className="flex min-w-0 flex-col gap-1">
-                  <ul className="flex flex-col gap-0.5">
-                    {rule.conditions.map((c, i) => (
-                      <li key={i}>
-                        {i > 0 && (
-                          <span className="mr-1 text-caption font-semibold text-muted-foreground">{t("Y", "AND")}</span>
-                        )}
-                        <span className="mr-1 text-caption text-muted-foreground">
-                          {conditionSpecs[c.kind].name[locale]}:
-                        </span>
-                        {specOf(c).describe(c, locale)}
-                      </li>
-                    ))}
-                  </ul>
-                  <span className="text-caption font-semibold">→ {describeSize(rule, locale)}</span>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </CardContent>
-    </Card>
   )
 }
 
