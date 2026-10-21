@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 import { ImageResponse } from "next/og"
 import { siteConfig } from "@/config/site"
 
@@ -7,7 +9,8 @@ import { siteConfig } from "@/config/site"
 export const ogSize = { width: 1200, height: 630 }
 export const ogContentType = "image/png"
 
-export function ogImage({ eyebrow, title, subtitle }: { eyebrow?: string; title: string; subtitle: string }) {
+export async function ogImage({ eyebrow, title, subtitle }: { eyebrow?: string; title: string; subtitle: string }) {
+  const mark = `data:image/png;base64,${(await readFile(join(process.cwd(), "public/logo-mark-white.png"))).toString("base64")}`
   return new ImageResponse(
     (
       <div
@@ -24,21 +27,8 @@ export function ogImage({ eyebrow, title, subtitle }: { eyebrow?: string; title:
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 16,
-              background: "#3b82f6",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 36,
-              fontWeight: 700,
-            }}
-          >
-            B
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- rendered by satori, not the browser */}
+          <img src={mark} width={72} height={72} alt="" />
           <div style={{ fontSize: 40, fontWeight: 700 }}>{siteConfig.name}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

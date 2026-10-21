@@ -73,8 +73,9 @@ test("a chain can't grow past the limit", () => {
   const extra = addNode(and.graph, { type: "condition", condition: rsi(9) }, 5, 6, 10);
   graph = extra.graph;
   graph = connect(graph, "a:c1", and.id!, 3);
-  graph = connect(graph, and.id!, extra.id!, 3);
-  assert.equal(graphToRules(graph).rules.length, 0);
+  graph = connect(graph, and.id!, extra.id!, 2);
+  assert.equal(graph.edges.some((e) => e.to === extra.id), false);
+  assert.equal(graphToRules(graph).rules.length, 1);
   const again = addNode(graph, { type: "condition", condition: rsi(10) }, 3, 7, 10);
   assert.equal(canConnect(again.graph, PRICE_ID, again.id!, 3), true);
 });
@@ -105,9 +106,11 @@ test("an AND takes several conditions in and gives several out, whatever their r
   assert.equal(graph.edges.filter((e) => e.to === and.id).length, 2);
   assert.equal(graph.edges.filter((e) => e.from === and.id).length, 2);
   graph = connect(connect(graph, x.id!, "a:amount", 3), y.id!, "b:amount", 3);
-  // 2 conditions in x 2 out: every combination is a rule
+  // 2 conditions in, 2 out: both inputs are required, so two rules (A+B+x, A+B+y), not four
   const { rules } = graphToRules(graph);
-  assert.equal(rules.filter((r) => r.conditions.length === 2).length, 4);
+  const three = rules.filter((r) => r.conditions.length === 3);
+  assert.equal(three.length, 2);
+  assert.deepEqual(three.map((r) => r.conditions.map((c) => (c.kind === "rsi" ? c.value : null))).map((c) => c.slice(0, 2)), [[1, 2], [1, 2]]);
 });
 
 test("an AND only joins conditions of the same depth", () => {
@@ -166,7 +169,8 @@ test("wiring re-lays the chain: columns follow the position in the chain", () =>
   const node = (id: string) => graph.nodes.find((n) => n.id === id)!;
   assert.equal(node(extra.id!).col, 3);
   assert.equal(levelsOf(graph), 2);
-  assert.equal(graphToRules(graph).rules[0].conditions.length, 2);
+  // the first condition still feeds the amount too: one rule alone, one with the extra condition
+  assert.deepEqual(graphToRules(graph).rules.map((r) => r.conditions.length).sort(), [1, 2]);
   // deleting the AND and the extra condition collapses the panel back to one condition
   graph = removeNode(removeNode(graph, and.id!), extra.id!);
   assert.equal(levelsOf(graph), 1);
@@ -222,4 +226,32 @@ test("auto-wiring never replaces a wire that exists", () => {
   assert.equal(graph.edges.length, before + 1);
   assert.equal(graph.edges.filter((e) => e.to === "a:amount").length, 1);
   assert.equal(autoWire(graph, "a:c0", 3), graph);
+});
+
+test("a condition can feed several ANDs, and one amount", () => {
+  let graph = rulesToGraph([rule("a", "buy", rsi(1)), rule("b", "buy", rsi(2))]);
+  const and1 = addNode(graph, { type: "and" }, 2, 8, 10);
+  const and2 = addNode(and1.graph, { type: "and" }, 2, 12, 10);
+  graph = and2.graph;
+  graph = connect(graph, "a:c0", and1.id!, 3);
+  graph = connect(graph, "a:c0", and2.id!, 3);
+  assert.equal(graph.edges.filter((e) => e.from === "a:c0" && (e.to === and1.id || e.to === and2.id)).length, 2);
+  assert.equal(graph.edges.some((e) => e.from === "a:c0" && e.to === "a:amount"), true);
+  // a second amount replaces the first one only
+  graph = connect(graph, "a:c0", "b:amount", 3);
+  assert.equal(graph.edges.some((e) => e.from === "a:c0" && e.to === "a:amount"), false);
+  assert.equal(graph.edges.filter((e) => e.from === "a:c0").length, 3);
+});
+
+test("a condition can be moved to a deeper condition column and wired again there", () => {
+  let graph = rulesToGraph([rule("a", "buy", rsi(1)), rule("b", "buy", rsi(2))]);
+  const and = addNode(graph, { type: "and" }, 2, 5, 10);
+  graph = connect(and.graph, "a:c0", and.id!, 3);
+  graph = moveNode(graph, "b:c0", 3, 5);
+  const moved = graph.nodes.find((n) => n.id === "b:c0")!;
+  assert.equal(moved.col, 3);
+  assert.equal(graph.edges.some((e) => e.to === "b:c0"), false);
+  graph = connect(graph, and.id!, "b:c0", 3);
+  assert.equal(graph.nodes.find((n) => n.id === "b:c0")!.col, 3);
+  assert.deepEqual(graphToRules(graph).rules.map((r) => r.conditions.length).sort(), [1, 2]);
 });

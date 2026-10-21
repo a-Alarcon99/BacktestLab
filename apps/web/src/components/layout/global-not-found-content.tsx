@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react"
 import Link from "next/link"
-import { ActivityIcon } from "lucide-react"
 import { siteConfig } from "@/config/site"
 import { defaultLocale, isLocale, LOCALE_COOKIE, localizePath, translator, type Locale } from "@/lib/i18n"
 
@@ -30,9 +29,8 @@ export function GlobalNotFoundContent() {
   return (
     <>
       <Link href={localizePath(locale, "/")} className="flex items-center gap-2 text-title font-bold tracking-tight">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <ActivityIcon className="size-4.5" />
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- static SVG, black on transparent: inverted in dark mode */}
+        <img src="/favicon.svg" alt="" width={36} height={36} className="size-9 dark:invert" />
         {siteConfig.name}
       </Link>
       <p className="num text-caption font-semibold text-muted-foreground">404</p>

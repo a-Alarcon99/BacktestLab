@@ -263,9 +263,9 @@ function StrategyEditor({ strategy, saved, storageKey }: { strategy?: Strategy; 
     <form
       noValidate
       onSubmit={submit}
-      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_var(--container-aside)] lg:items-start lg:gap-8"
+      className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_var(--container-aside)] lg:items-stretch lg:gap-8 lg:pb-10"
     >
-      <div className="min-w-0">
+      <div className="flex min-w-0 flex-col">
         <StrategyBuilder graph={graph} onChange={setGraph} invalid={invalid} dashed={dashed} nodeErrors={nodeErrors} />
       </div>
 

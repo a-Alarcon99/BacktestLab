@@ -1,6 +1,16 @@
 # Changelog
 
-## 0.3.0 — Beta (sin publicar)
+## 0.3.1 — Beta (sin publicar)
+
+- Nuevo logo de BacktestLab (cabecera, página 404 e imagen para compartir) y nuevos iconos de pestaña
+  (`favicon.ico`, `icon.svg` con modo oscuro, `icon.png`, `apple-icon.png`).
+- Editor visual: el nodo Y exige que se cumplan **todas** las condiciones que entran en él. Con A y B
+  entrando y C y D saliendo se crean 2 reglas (`A+B+C` y `A+B+D`) en vez de 4. El límite de 3 condiciones
+  cuenta las condiciones de cada regla, no solo la profundidad del camino.
+- Editor visual: una condición puede conectarse a varios nodos Y (y además a una cantidad).
+- Página de activo: se elimina el botón «Configurar backtest», que no hacía nada útil.
+
+## 0.3.0 — Beta (2026-10-21)
 
 - Editor visual de estrategias por nodos: menú de componentes, panel con columnas fijas e invisibles,
   cables, varias conexiones en el nodo Y y en Cantidad (una regla por camino), venta solo en %, colocación
