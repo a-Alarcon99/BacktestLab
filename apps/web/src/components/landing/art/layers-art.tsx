@@ -14,12 +14,12 @@ import {
   pad,
   phase,
   type Point,
-} from "@/lib/landing/geometry"
+} from "@/lib/chart-geometry"
 import { snapshot } from "@/lib/landing/snapshot"
 import { presetInfo } from "@/lib/preset-strategies"
 import { cn } from "@/lib/utils"
 import { monthRange, monthYear, num, pct } from "../format"
-import { useClock, useShouldPlay, useWidth } from "../motion"
+import { useClock, useShouldPlay, useWidth } from "@/lib/motion"
 
 // A3 · "One backtest, four layers": a real price chart with its trades tilts into an exploded
 // stack of glass panels that share its time axis (result per trade, equity, drawdown). A slice of

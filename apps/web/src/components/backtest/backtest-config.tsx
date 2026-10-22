@@ -27,7 +27,7 @@ import {
 import { formatDate, numberFormat } from "@/lib/format"
 import { isPreset } from "@/lib/preset-strategies"
 import { useRunnableStrategies } from "@/lib/storage/strategies"
-import { ReplayPlayer, type ReplayRun } from "./backtest-replay"
+import { REPLAY_DIALOG_CLASS, ReplayPlayer, type ReplayRun } from "./backtest-replay"
 
 const DEFAULT_PRESET: RangePreset = "3A"
 
@@ -245,7 +245,7 @@ function BacktestConfig({
       </footer>
 
       <Dialog open={replayOpen} onOpenChange={setReplayOpen}>
-        <DialogContent className={run ? undefined : "w-[min(32rem,calc(100vw-1.5rem))]"}>
+        <DialogContent className={run ? REPLAY_DIALOG_CLASS : "w-[min(32rem,calc(100vw-1.5rem))]"}>
           {run ? (
             <ReplayPlayer run={run} onClose={() => setReplayOpen(false)} />
           ) : (

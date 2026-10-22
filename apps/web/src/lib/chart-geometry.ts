@@ -1,4 +1,4 @@
-// Pure helpers that turn the landing snapshot into SVG geometry and running figures.
+// Pure helpers that turn chart data (landing snapshot, backtest results) into SVG geometry.
 // No imports on purpose: the tests load this file directly with Node.
 
 export type Point = { x: number; y: number }

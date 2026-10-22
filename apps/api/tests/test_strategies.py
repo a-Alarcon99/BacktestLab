@@ -129,13 +129,18 @@ def test_buy_dip_sell_rally():
     s = strategy(rule("buy", change("down", 5)), rule("sell", change("up", 20, "entry")))
     sim = simulate(df, s, dt(2026, 1, 1), "1d")
 
-    assert [(t["i"], t["side"]) for t in sim.trades] == [(1, "buy"), (3, "sell")]
-    assert sim.stats.final_capital == pytest.approx(1000 * 120 / 90)
-    assert sim.stats.realized_pnl == pytest.approx(1000 * 120 / 90 - 1000)
+    # Signals at the closes of candles 1 and 3, filled at the next opens (95 and 125).
+    assert [(t["i"], t["signal_i"], t["side"]) for t in sim.trades] == [
+        (2, 1, "buy"),
+        (4, 3, "sell"),
+    ]
+    assert sim.stats.final_capital == pytest.approx(1000 * 125 / 95)
+    assert sim.stats.realized_pnl == pytest.approx(1000 * 125 / 95 - 1000)
     assert sim.stats.win_rate_pct == 100
+    assert sim.stats.round_trips == 1
     assert not sim.stats.open_position
-    assert sim.buys.tolist() == [0, 1, 1, 1, 1]
-    assert sim.sells.tolist() == [0, 0, 0, 1, 1]
+    assert sim.buys.tolist() == [0, 0, 1, 1, 1]
+    assert sim.sells.tolist() == [0, 0, 0, 0, 1]
 
 
 def test_fee_and_partial_sizes():
@@ -146,20 +151,74 @@ def test_fee_and_partial_sizes():
         fee=1,
     )
     sim = simulate(df, s, dt(2026, 1, 1), "1d")
-    assert sim.stats.buys == 4
-    # 400 USDT spent, 1% fee lost; nothing sold.
-    assert sim.stats.final_capital == pytest.approx(600 + 400 * 0.99)
-    assert sim.stats.unrealized_pnl == pytest.approx(-4)
+    # Signals on candles 0-2 fill on 1-3; the last candle's signal never fills.
+    assert sim.stats.buys == 3
+    # 300 USDT spent (1 % fee), the 2.97 units held are valued as sold (another 1 %).
+    held = 2.97 * 100 * 0.99
+    assert sim.stats.final_capital == pytest.approx(700 + held)
+    assert sim.stats.unrealized_pnl == pytest.approx(held - 300)
     assert sim.stats.open_position
+    assert sim.fees_paid == pytest.approx(3)
+
+
+def test_signal_on_the_last_candle_never_fills():
+    df = candles([100, 100, 90])
+    sim = simulate(df, strategy(rule("buy", change("down", 5))), dt(2026, 1, 1), "1d")
+    assert sim.trades == []
+    assert sim.stats.final_capital == 1000
+
+
+def test_open_position_is_valued_with_the_exit_fee():
+    df = candles([100, 100, 100])
+    s = strategy(rule("buy", {"kind": "periodic", "every": "day"}), fee=1)
+    sim = simulate(df, s, dt(2026, 1, 1), "1d")
+    assert sim.stats.buys == 1  # the second signal has no cash left
+    assert sim.stats.final_capital == pytest.approx(9.9 * 100 * 0.99)
+    assert sim.stats.return_pct == pytest.approx(-1.99)
+    assert sim.equity[-1] == pytest.approx(sim.stats.final_capital)
+
+
+def test_sells_are_checked_before_buys():
+    df = candles([100, 100, 102, 102])
+    s = strategy(
+        rule("buy", {"kind": "periodic", "every": "day"}, size=50),
+        rule("sell", change("up", 1)),
+    )
+    sim = simulate(df, s, dt(2026, 1, 1), "1d")
+    # Candle 2 signals both a buy and a sell: the sell wins and closes everything.
+    assert [t["side"] for t in sim.trades] == ["buy", "buy", "sell"]
+    assert not sim.stats.open_position
+
+
+def test_a_too_small_buy_tries_the_next_rule():
+    df = candles([100, 100, 100])
+    every_day = {"kind": "periodic", "every": "day"}
+    s = strategy(rule("buy", every_day, size=0.001, unit="usdt"), rule("buy", every_day, size=10))
+    sim = simulate(df, s, dt(2026, 1, 1), "1d")
+    assert [t["rule_id"] for t in sim.trades] == ["r1", "r1"]
 
 
 def test_sell_percent_of_position():
-    df = candles([100, 90, 110, 130])
+    df = candles([100, 90, 110, 130, 150, 170])
     s = strategy(rule("buy", change("down", 5)), rule("sell", change("up", 10), size=50))
     sim = simulate(df, s, dt(2026, 1, 1), "1d")
     sells = [t for t in sim.trades if t["side"] == "sell"]
-    assert len(sells) == 2
+    assert len(sells) == 3
     assert sells[1]["quantity"] == pytest.approx(sells[0]["quantity"] / 2)
+    assert sim.stats.open_position
+    assert sim.stats.round_trips == 0  # still open: no closed trade to count yet
+
+
+def test_a_partial_sell_leaving_dust_sells_everything():
+    df = candles([100, 90, 110, 130, 150, 170])
+    s = strategy(rule("buy", change("down", 5)), rule("sell", change("up", 10), size=95))
+    sim = simulate(df, s, dt(2026, 1, 1), "1d")
+    sells = [t for t in sim.trades if t["side"] == "sell"]
+    # The second 95 % sell would leave ~3 USDT (< 1 % of 1000): it sells the whole rest.
+    assert len(sells) == 2
+    assert not sim.stats.open_position
+    assert sim.stats.round_trips == 1
+    assert sim.stats.win_rate_pct == 100  # one round trip, not two orders
 
 
 def test_warmup_candles_are_not_traded():
@@ -167,16 +226,18 @@ def test_warmup_candles_are_not_traded():
     s = strategy(rule("buy", change("down", 5)))
     sim = simulate(df, s, dt(2026, 1, 3), "1d")
     assert len(sim.times) == 3
-    assert sim.trades[0]["i"] == 0  # first candle of the range, already signalling
+    # First candle of the range already signals; it fills at the next open.
+    assert (sim.trades[0]["signal_i"], sim.trades[0]["i"]) == (0, 1)
     assert warmup_candles(s) == 1
 
 
 def test_to_result_downsamples():
     df = candles(list(np.linspace(100, 200, 3000)), freq="1h")
     s = strategy(rule("buy", {"kind": "periodic", "every": "day"}, size=10))
-    result = to_result(simulate(df, s, dt(2026, 1, 1), "1h"), 1000)
+    result = to_result(simulate(df, s, dt(2026, 1, 1), "1h"))
     assert result.candle_count == 3000
-    assert len(result.candles) == len(result.equity) == 1500
+    assert len(result.candles) == len(result.equity) == len(result.drawdown) == 1500
+    assert len(result.benchmark) == 1500
     assert result.candles[0].open == 100
     assert result.candles[-1].close == 200
     assert all(t.index < 1500 for t in result.trades)

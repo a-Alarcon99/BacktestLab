@@ -15,12 +15,12 @@ import {
   pad,
   runningFigures,
   slotX,
-} from "@/lib/landing/geometry"
+} from "@/lib/chart-geometry"
 import { snapshot } from "@/lib/landing/snapshot"
 import { presetInfo } from "@/lib/preset-strategies"
 import { cn } from "@/lib/utils"
 import { dayRange, dayTime, num, pct } from "../format"
-import { useCssLoop, useShouldPlay } from "../motion"
+import { useCssLoop, useShouldPlay } from "@/lib/motion"
 
 // A1 · Hero: the replay of a real backtest, revealed candle by candle like the product's
 // `ReplayPlayer`. Driven by CSS animations (one per element, delays from the data) restarted every

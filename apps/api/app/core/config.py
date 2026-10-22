@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # `/health` warms quotes and stored candles in the background, at most this often.
     warmup_min_interval_seconds: int = 300
     # False: this process never calls Binance/CoinGecko and serves only what is stored (kept fresh
-    # by `python -m app.sync` running elsewhere, see docs/12-sincronizacion-local.md).
+    # by `python -m app.sync` running elsewhere, see docs/03-datos-de-mercado.md, Parte D).
     provider_fetch_enabled: bool = True
     # Pause between rounds of `python -m app.sync`.
     sync_interval_seconds: int = 15

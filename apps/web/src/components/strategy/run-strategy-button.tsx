@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { FlaskConicalIcon, PlayIcon } from "lucide-react"
-import { ReplayPlayer, type ReplayRun } from "@/components/backtest/backtest-replay"
+import { REPLAY_DIALOG_CLASS, ReplayPlayer, type ReplayRun } from "@/components/backtest/backtest-replay"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -64,7 +64,7 @@ function RunStrategyButton({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className={run ? undefined : "w-[min(36rem,calc(100vw-1.5rem))]"}>
+        <DialogContent className={run ? REPLAY_DIALOG_CLASS : "w-[min(36rem,calc(100vw-1.5rem))]"}>
           {run ? (
             <ReplayPlayer run={run} onClose={() => setOpen(false)} />
           ) : (

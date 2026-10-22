@@ -177,7 +177,10 @@ class ReplayCandle(CamelModel):
 
 
 class Trade(CamelModel):
+    # Open time of the candle the order filled on (at its open price).
     time: datetime
+    # Open time of the candle whose close gave the signal (the one before `time`).
+    signal_time: datetime
     # Index in `BacktestResult.candles` (display buckets).
     index: int
     side: Literal["buy", "sell"]
@@ -185,24 +188,125 @@ class Trade(CamelModel):
     quantity: float
     # USDT spent (buy, fee included) or received (sell, fee deducted).
     amount: float
-    # Realized PnL of a sell.
+    # Realized PnL of a sell (proceeds minus the share of the position's cost).
     pnl: float | None = None
     # `Rule.id` of the rule that placed the order.
     rule_id: str
+    # Index in `BacktestResult.round_trips` of the trade this order belongs to.
+    round_trip: int
 
 
 class BacktestStats(CamelModel):
+    # Orders.
     buys: int
     sells: int
     trades: int
+    # Closed round trips (from flat to flat), the unit of the win rate.
+    round_trips: int
     realized_pnl: float
+    # Open position valued at what selling it at the last close would return (fee deducted).
     unrealized_pnl: float
     return_pct: float
+    benchmark_return_pct: float
     win_rate_pct: float
     max_drawdown_pct: float
     sharpe: float
     final_capital: float
     open_position: bool
+
+
+class RoundTrip(CamelModel):
+    """One trade from flat to flat; an open one is valued at the last close (exit fee deducted)."""
+
+    # Display indices (buckets) of the first buy and the closing sell (last candle if open).
+    entry_index: int
+    exit_index: int
+    entry_time: datetime
+    exit_time: datetime | None
+    # Average fill prices (fees excluded); `exit_price` is the last close while open.
+    entry_price: float
+    exit_price: float
+    # USDT spent on the buys, fees included.
+    invested: float
+    pnl: float
+    pnl_pct: float
+    # Candles held and the same in seconds.
+    bars: int
+    duration_seconds: float
+    exit_rule_id: str | None
+    open: bool
+    # Deepest fall of the price below the entry price while held (<= 0, %).
+    worst_pct: float
+    buys: int
+    sells: int
+
+
+class DrawdownPeriod(CamelModel):
+    """Longest time spent below a previous equity peak."""
+
+    start_index: int
+    end_index: int
+    start_time: datetime
+    end_time: datetime
+    candles: int
+    seconds: float
+    # False when the equity never got back to the peak before the end.
+    recovered: bool
+    depth_pct: float
+
+
+class PeriodReturn(CamelModel):
+    start: date
+    return_pct: float
+    benchmark_pct: float
+
+
+class PeriodReturns(CamelModel):
+    unit: Literal["day", "week", "month", "quarter", "year"]
+    items: list[PeriodReturn]
+
+
+class BacktestMetrics(CamelModel):
+    """Report figures, computed at full resolution. `None` = not defined for this run."""
+
+    days: float
+    net_profit: float
+    return_pct: float
+    benchmark_return_pct: float
+    # Return minus the benchmark's, in percentage points.
+    excess_return_pct: float
+    max_drawdown_pct: float
+    benchmark_max_drawdown_pct: float
+    # Display index of the bottom of the deepest drawdown.
+    max_drawdown_index: int | None
+    longest_drawdown: DrawdownPeriod | None
+    round_trips: int
+    wins: int
+    losses: int
+    win_rate_pct: float
+    profit_factor: float | None
+    avg_win_pct: float | None
+    avg_loss_pct: float | None
+    payoff_ratio: float | None
+    expectancy_pct: float | None
+    expectancy_usdt: float | None
+    best_trade_pct: float | None
+    worst_trade_pct: float | None
+    # Share of the closed trades' total profit made by the best one (%).
+    best_trade_share_pct: float | None
+    max_win_streak: int
+    max_loss_streak: int
+    avg_bars: float | None
+    avg_duration_seconds: float | None
+    # Candles with an open position, % of the range.
+    exposure_pct: float
+    fees_paid: float
+    trades_per_month: float
+    cagr_pct: float | None
+    sharpe: float | None
+    sortino: float | None
+    calmar: float | None
+    volatility_pct: float | None
 
 
 class BacktestResult(CamelModel):
@@ -214,7 +318,16 @@ class BacktestResult(CamelModel):
     buys: list[int]
     sells: list[int]
     realized: list[float]
+    # Liquidation value (an open position sold at the close, fee deducted) at the end of each
+    # display candle, and the same for buying at the first open and holding (`benchmark`).
     equity: list[float]
+    benchmark: list[float]
+    # Deepest fall below the previous peak inside each display candle (%, positive).
+    drawdown: list[float]
+    benchmark_drawdown: list[float]
     # Short equity curve normalized to 100, for list sparklines.
     equity_curve: list[float]
+    round_trips: list[RoundTrip]
+    periods: PeriodReturns
+    metrics: BacktestMetrics
     stats: BacktestStats

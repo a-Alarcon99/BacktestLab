@@ -22,7 +22,10 @@ export type BacktestRequest = {
 export type ReplayCandle = { time: string; open: number; high: number; low: number; close: number }
 
 export type BacktestTrade = {
+  /** Open time of the candle the order filled on, at its open price. */
   time: string
+  /** Open time of the candle whose close gave the signal (the candle before `time`). */
+  signalTime: string
   /** Index in `BacktestResult.candles`. */
   index: number
   side: "buy" | "sell"
@@ -33,22 +36,114 @@ export type BacktestTrade = {
   pnl: number | null
   /** `Rule.id` of the strategy rule that placed the order. */
   ruleId: string
+  /** Index in `BacktestResult.roundTrips` of the trade this order belongs to. */
+  roundTrip: number
 }
 
 export type BacktestStats = {
+  /** Orders. */
   buys: number
   sells: number
   trades: number
+  /** Closed trades (from flat to flat): the unit of the win rate. */
+  roundTrips: number
   realizedPnl: number
+  /** Open position valued as sold at the last close (fee deducted). */
   unrealizedPnl: number
   /** Percentages: 12.5 = +12.50%. */
   returnPct: number
+  benchmarkReturnPct: number
   winRatePct: number
   /** Positive: 21.4 = −21.4%. */
   maxDrawdownPct: number
   sharpe: number
   finalCapital: number
   openPosition: boolean
+}
+
+/** One trade from flat to flat; an open one is valued at the last close (exit fee deducted). */
+export type RoundTrip = {
+  /** Display indices (in `candles`) of the first buy and the closing sell (last candle if open). */
+  entryIndex: number
+  exitIndex: number
+  entryTime: string
+  exitTime: string | null
+  /** Average fill prices, fees excluded; `exitPrice` is the last close while open. */
+  entryPrice: number
+  exitPrice: number
+  /** USDT spent on the buys, fees included. */
+  invested: number
+  pnl: number
+  pnlPct: number
+  bars: number
+  durationSeconds: number
+  exitRuleId: string | null
+  open: boolean
+  /** Deepest fall of the price below the entry while held (≤ 0, %). */
+  worstPct: number
+  buys: number
+  sells: number
+}
+
+export type DrawdownPeriod = {
+  startIndex: number
+  endIndex: number
+  startTime: string
+  endTime: string
+  candles: number
+  seconds: number
+  /** False when the equity never got back to the peak. */
+  recovered: boolean
+  depthPct: number
+}
+
+export type PeriodUnit = "day" | "week" | "month" | "quarter" | "year"
+
+export type PeriodReturns = {
+  unit: PeriodUnit
+  items: { start: string; returnPct: number; benchmarkPct: number }[]
+}
+
+/** Report figures, computed by the engine at full resolution; `null` = not defined for this run. */
+export type BacktestMetrics = {
+  days: number
+  netProfit: number
+  returnPct: number
+  benchmarkReturnPct: number
+  /** Return minus buy and hold's, in percentage points. */
+  excessReturnPct: number
+  maxDrawdownPct: number
+  benchmarkMaxDrawdownPct: number
+  /** Display index of the bottom of the deepest drawdown. */
+  maxDrawdownIndex: number | null
+  longestDrawdown: DrawdownPeriod | null
+  roundTrips: number
+  wins: number
+  losses: number
+  winRatePct: number
+  profitFactor: number | null
+  avgWinPct: number | null
+  avgLossPct: number | null
+  payoffRatio: number | null
+  expectancyPct: number | null
+  expectancyUsdt: number | null
+  bestTradePct: number | null
+  worstTradePct: number | null
+  /** Share of the closed trades' gross profit made by the best one (%). */
+  bestTradeSharePct: number | null
+  maxWinStreak: number
+  maxLossStreak: number
+  avgBars: number | null
+  avgDurationSeconds: number | null
+  /** Candles with an open position, % of the range. */
+  exposurePct: number
+  feesPaid: number
+  tradesPerMonth: number
+  cagrPct: number | null
+  sharpe: number | null
+  sortino: number | null
+  calmar: number | null
+  volatilityPct: number | null
 }
 
 export type BacktestResult = {
@@ -60,15 +155,28 @@ export type BacktestResult = {
   buys: number[]
   sells: number[]
   realized: number[]
+  /** Liquidation value at the end of each display candle; `benchmark` = buy at the first open and hold. */
   equity: number[]
+  benchmark: number[]
+  /** Deepest fall below the previous peak inside each display candle (%, positive). */
+  drawdown: number[]
+  benchmarkDrawdown: number[]
   /** Short equity curve normalized to 100. */
   equityCurve: number[]
+  roundTrips: RoundTrip[]
+  periods: PeriodReturns
+  metrics: BacktestMetrics
   stats: BacktestStats
 }
 
-/** Saved summary of a run. The full result is not stored: reviewing re-runs it (deterministic). */
+type RecordStatsV1 = Pick<BacktestStats, "returnPct" | "maxDrawdownPct" | "sharpe" | "winRatePct" | "trades" | "finalCapital">
+
+/**
+ * Saved summary of a run. The full result is not stored: reviewing re-runs it (deterministic).
+ * Version 1 records were computed by the previous engine (fills at the signal's close, no exit
+ * fee); they are still listed but never compared with new runs.
+ */
 export type BacktestRecord = {
-  schemaVersion: 1
   id: string
   /** ISO timestamp of the run. */
   executedAt: string
@@ -78,9 +186,21 @@ export type BacktestRecord = {
   to: string
   /** Snapshot: editing or deleting the strategy doesn't change the history. */
   strategy: Strategy
-  stats: Pick<BacktestStats, "returnPct" | "maxDrawdownPct" | "sharpe" | "winRatePct" | "trades" | "finalCapital">
   equity: number[]
-}
+} & (
+  | { schemaVersion: 1; stats: RecordStatsV1 }
+  | {
+      schemaVersion: 2
+      stats: RecordStatsV1 & {
+        benchmarkReturnPct: number
+        profitFactor: number | null
+        roundTrips: number
+        exposurePct: number
+      }
+    }
+)
+
+export type BacktestRecordV2 = Extract<BacktestRecord, { schemaVersion: 2 }>
 
 /**
  * Runs through this app's server, which checks and consumes the plan quota before calling the
@@ -99,14 +219,25 @@ export async function runBacktest(request: BacktestRequest, signal?: AbortSignal
   }
 }
 
-export function recordFromResult(request: BacktestRequest, result: BacktestResult): BacktestRecord {
-  const { returnPct, maxDrawdownPct, sharpe, winRatePct, trades, finalCapital } = result.stats
+export function recordFromResult(request: BacktestRequest, result: BacktestResult): BacktestRecordV2 {
+  const { returnPct, maxDrawdownPct, sharpe, winRatePct, trades, finalCapital, benchmarkReturnPct, roundTrips } = result.stats
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: crypto.randomUUID(),
     executedAt: new Date().toISOString(),
     ...request,
-    stats: { returnPct, maxDrawdownPct, sharpe, winRatePct, trades, finalCapital },
+    stats: {
+      returnPct,
+      maxDrawdownPct,
+      sharpe,
+      winRatePct,
+      trades,
+      finalCapital,
+      benchmarkReturnPct,
+      roundTrips,
+      profitFactor: result.metrics.profitFactor,
+      exposurePct: result.metrics.exposurePct,
+    },
     equity: result.equityCurve,
   }
 }

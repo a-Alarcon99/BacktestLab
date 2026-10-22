@@ -30,8 +30,8 @@ export function faqItems(t: Translate, { limits, since }: { limits: Limits; sinc
     {
       q: t("¿Se tienen en cuenta las comisiones?", "Are fees taken into account?"),
       a: t(
-        "Sí. Cada orden paga la comisión que configures en la estrategia y se ejecuta al cierre de la vela que da la señal, sin mirar velas futuras.",
-        "Yes. Every order pays the fee you set in the strategy and fills at the close of the candle that gives the signal, without looking at future candles."
+        "Sí. Cada orden paga la comisión que configures en la estrategia. La señal se calcula al cierre de una vela y la orden se ejecuta a la apertura de la siguiente, como ocurriría en la realidad, sin mirar velas futuras.",
+        "Yes. Every order pays the fee you set in the strategy. The signal is computed at a candle's close and the order fills at the next candle's open, as it would in reality, without looking at future candles."
       ),
     },
     {

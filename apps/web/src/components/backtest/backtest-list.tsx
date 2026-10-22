@@ -44,6 +44,7 @@ function BacktestList({ backtests }: { backtests: BacktestRecord[] }) {
         from: selected.from,
         to: selected.to,
         mode: "review",
+        recordId: selected.id,
       },
     [selected]
   )

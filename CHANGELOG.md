@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.5.1 — Beta (2026-10-22)
+
+- Backtest: botón **Ampliar ventana** junto a la «x» (el diálogo ocupa toda la pantalla; se deshace con el mismo botón).
+- Reproducción: las primeras velas ya no se ven deformadas. La escala de precio parte de un mínimo equivalente a
+  unas 14 velas típicas (calculado con las primeras velas) y solo crece si el precio se mueve más.
+- Factor de beneficio: sin operaciones perdedoras ya no se muestra «∞», sino «Sin pérdidas» con su explicación.
+- Tabla de operaciones: las operaciones sin salida se destacan (fila resaltada, «Sin salida», «último cierre»,
+  «sin cerrar», «Sigue abierta») y el encabezado cuenta cuántas hay.
+- Compras y ventas explícitas: una operación (de entrar a cerrar todo) puede tener muchas compras y varias
+  ventas parciales, y no se veía. Ahora el panel en vivo dice «15 compras · 3 ventas» en vez de «18 órdenes»,
+  hay un dato nuevo «Compras y ventas» (16 datos clave) y la tabla de operaciones tiene la columna
+  «Compras / ventas». También se corrigen plurales («1 operaciones» → «1 operación»).
+
+## 0.5.0 — Beta (2026-10-22)
+
+- **Motor más realista** (cambia los resultados, también al revisar backtests guardados):
+  - la señal se calcula al cierre de una vela y la orden se ejecuta a la **apertura de la siguiente**;
+  - una posición abierta al final se valora **descontando la comisión de venta**;
+  - una venta parcial que dejaría menos del 1 % del capital inicial vende todo;
+  - la tasa de acierto cuenta **operaciones completas** (de comprar a vender todo), no órdenes;
+  - «precio desde la compra» se mide sin la comisión;
+  - una regla de compra con importe demasiado pequeño deja probar la siguiente.
+- Nuevo análisis a resolución completa (`app/strategies/analytics.py`): comprar y mantener, caídas y
+  tiempo en pérdidas, operaciones completas, rentabilidad por periodo y métricas (factor de beneficio,
+  ganancia/pérdida media, rachas, exposición, comisiones, rentabilidad anualizada, Sharpe, Sortino,
+  Calmar, volatilidad).
+- **Reproducción nueva, toda en SVG**, en una «cabina»:
+  - velas con zonas de posición, arcos y resultados;
+  - capital frente a comprar y mantener;
+  - caída desde el máximo;
+  - datos en vivo;
+  - pausa, velocidad 1×/2×/4×, barra arrastrable y atajos de teclado.
+- Al terminar, el diálogo se convierte en un **informe**:
+  - veredicto con reglas claras, avisos de fiabilidad y comparación con la ejecución anterior;
+  - 15 datos con explicación sencilla;
+  - 7 gráficos;
+  - tabla de operaciones (clic → la muestra en el gráfico);
+  - ratios avanzados;
+  - exportación a PDF, PNG y CSV.
+- El historial guarda más cifras (comprar y mantener, factor de beneficio, operaciones, exposición).
+- Cifras de la portada regeneradas con el motor nuevo.
+- Documentación (la carpeta `docs/` está en `.gitignore`, estos cambios no se suben a GitHub):
+  - nuevos docs 18 (motor y análisis), 19 (reproducción e informe) y 20 (portada);
+  - lo antiguo se conserva marcado como **OBSOLETO** con su motivo en los docs 01, 02, 04, 07, 08 y 00
+    (ejecución al cierre, win rate por venta, animación en `<canvas>`, `/` como catálogo, constantes viejas);
+  - docs 10 y 11 ampliados, y el registro `17` con una sección nueva para motor, reproducción y portada;
+  - `README.md` actualizado (editor sin nodos Y/Cantidad, ejecución a la apertura siguiente, informe, portada).
+
 ## 0.4.0 — Beta (2026-10-21)
 
 - Nueva página principal (`/`): una landing de 7 secciones (portada, cifras del producto, cómo funciona,

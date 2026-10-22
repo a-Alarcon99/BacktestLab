@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Badge } from "@/components/ui/badge"
 import { biasLabel, patternById, type CandlePattern, type PatternId, type SchematicCandle } from "@/lib/candle-patterns"
-import { extent, linear } from "@/lib/landing/geometry"
+import { extent, linear } from "@/lib/chart-geometry"
 import { cn } from "@/lib/utils"
-import { useShouldPlay } from "../motion"
+import { useShouldPlay } from "@/lib/motion"
 
 // M2 · Candlestick patterns: a short trend draws in, then the pattern's candles, and the candle
 // that completes it lights up with its name (detection happens at its close: no look-ahead).

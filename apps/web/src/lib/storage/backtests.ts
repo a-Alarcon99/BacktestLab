@@ -8,7 +8,7 @@ import { createLocalStore, isObject, parseList } from "./local-store"
 function isRecord(item: unknown): item is BacktestRecord {
   return (
     isObject(item) &&
-    item.schemaVersion === 1 &&
+    (item.schemaVersion === 1 || item.schemaVersion === 2) &&
     typeof item.id === "string" &&
     typeof item.symbol === "string" &&
     isObject(item.strategy) &&

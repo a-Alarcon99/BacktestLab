@@ -292,7 +292,10 @@ function NodeEditor({
         : t("Compra", "Buy")
   const description =
     node.type === "condition"
-      ? t("Se evalúa al cierre de cada vela.", "Evaluated on the close of every candle.")
+      ? t(
+          "Se evalúa al cierre de cada vela; la orden se ejecuta a la apertura de la siguiente.",
+          "Evaluated on the close of every candle; the order fills at the next candle's open."
+        )
       : side === "buy"
         ? t("Cuánto comprar cuando se cumpla la regla.", "How much to buy when the rule fires.")
         : t("Qué parte de la posición vender cuando se cumpla la regla.", "How much of the position to sell when the rule fires.")
