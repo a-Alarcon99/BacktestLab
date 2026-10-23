@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react"
 
-// Shared plumbing of the landing animations: they only run while visible on screen, in a visible
+// Shared plumbing of the animations (landing, backtest replay): they only run while visible on screen, in a visible
 // tab, and show their final frame when the visitor asks for reduced motion.
 
 const reducedQuery = "(prefers-reduced-motion: reduce)"
@@ -18,6 +18,19 @@ export function useReducedMotion() {
   return useSyncExternalStore(
     subscribeReduced,
     () => window.matchMedia(reducedQuery).matches,
+    () => false
+  )
+}
+
+/** True while the viewport matches a media query (false on the server render). */
+export function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia(query)
+      media.addEventListener("change", onChange)
+      return () => media.removeEventListener("change", onChange)
+    },
+    () => window.matchMedia(query).matches,
     () => false
   )
 }
@@ -102,6 +115,19 @@ export function useWidth(ref: RefObject<Element | null>) {
     return () => observer.disconnect()
   }, [ref])
   return width
+}
+
+/** Height of an element, kept up to date with a ResizeObserver (0 before the first measure). */
+export function useHeight(ref: RefObject<Element | null>) {
+  const [height, setHeight] = useState(0)
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => setHeight(entry.contentRect.height))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return height
 }
 
 /**

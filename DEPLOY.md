@@ -75,7 +75,7 @@ Piezas y para qué sirve cada una:
      o `PoolTimeout`: la `DATABASE_URL` es incorrecta. Corrígela en *Environment*, guarda y
      espera ~1 minuto (Supabase bloquea unos 30 s tras varios intentos fallidos).
 3. `…/assets` → lista de activos con precios (la primera vez puede tardar unos segundos).
-> ⚠️ **OBSOLETO** · "la primera vez descarga datos de Binance" es del diseño antiguo; hoy la API solo lee R2 y la cola (ver `docs/14-velas-parquet-r2.md`).
+> ⚠️ **OBSOLETO** · "la primera vez descarga datos de Binance" es del diseño antiguo; hoy la API solo lee R2 y la cola (ver `docs/03-datos-de-mercado.md`, Parte C).
 
 4. `…/assets/BTC/candles?timeframe=1d` → lista de velas. La primera vez descarga datos de
    Binance y puede tardar; repite hasta que responda rápido.

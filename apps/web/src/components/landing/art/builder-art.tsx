@@ -29,12 +29,12 @@ import {
   slotX,
   wireControls,
   type Point,
-} from "@/lib/landing/geometry"
+} from "@/lib/chart-geometry"
 import { snapshot } from "@/lib/landing/snapshot"
 import { specOf, type Condition } from "@/lib/strategy"
 import { cn } from "@/lib/utils"
 import { monthRange, num } from "../format"
-import { useClock, useShouldPlay, useWidth } from "../motion"
+import { useClock, useShouldPlay, useWidth } from "@/lib/motion"
 
 // A2 · "Live builder": an illustrated version of the visual strategy editor. A cursor drags two
 // conditions in, wires them to a buy, a signal runs through the wires and the rule is written out

@@ -16,7 +16,7 @@ import {
   runningFigures,
   slotX,
   wireControls,
-} from "../src/lib/landing/geometry.ts";
+} from "../src/lib/chart-geometry.ts";
 import data from "../src/lib/landing/snapshot.json" with { type: "json" };
 import type { Snapshot } from "../src/lib/landing/snapshot.ts";
 

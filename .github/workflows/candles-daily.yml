@@ -1,7 +1,7 @@
 # Uploads yesterday's 1m candles (and the 15m / 1h derived from them) to Cloudflare R2.
 # Reads data.binance.vision, a static CDN that does not ban shared IPs like the REST API does.
 # Needs these repository secrets: DATABASE_URL, R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID,
-# R2_SECRET_ACCESS_KEY. See docs/06-almacenamiento-datos.md.
+# R2_SECRET_ACCESS_KEY. See docs/03-datos-de-mercado.md.
 name: candles-daily
 
 on:

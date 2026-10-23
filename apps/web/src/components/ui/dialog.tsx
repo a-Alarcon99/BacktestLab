@@ -14,7 +14,7 @@ const DialogDescription = DialogPrimitive.Description
 function DialogContent({ className, children, ...props }: DialogPrimitive.Popup.Props) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
+      <DialogPrimitive.Backdrop data-slot="dialog-backdrop" className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0" />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(

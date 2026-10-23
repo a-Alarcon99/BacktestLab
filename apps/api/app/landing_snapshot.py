@@ -18,6 +18,7 @@ import pandas as pd
 from app.core import db
 from app.schemas.backtest import StrategyConfig
 from app.services.candles import TIMEFRAME_SPAN, Timeframe, get_asset_ref, get_candles
+from app.strategies import analytics
 from app.strategies import indicators as ind
 from app.strategies.conditions import spec
 from app.strategies.engine import Simulation, simulate, warmup_candles
@@ -133,26 +134,21 @@ def _load(
 
 
 def _round_trips(sim: Simulation) -> list[dict]:
-    """Closed trades (one buy of 100 % followed by its full sell), as candle indices of the range."""
-    trips, entry = [], None
-    for t in sim.trades:
-        if t["side"] == "buy":
-            entry = t
-        elif entry is not None:
-            cost = entry["amount"]
-            trips.append(
-                {
-                    "entry": entry["i"],
-                    "exit": t["i"],
-                    "entryPrice": round(entry["price"], 2),
-                    "exitPrice": round(t["price"], 2),
-                    "pnlPct": round(t["pnl"] / cost * 100, 2),
-                    "bars": t["i"] - entry["i"],
-                    "exitRule": t["rule_id"],
-                }
-            )
-            entry = None
-    return trips
+    """Closed round trips (flat to flat), as candle indices of the range."""
+    trips = analytics.round_trips(sim, np.arange(len(sim.times)))
+    return [
+        {
+            "entry": t.entry_index,
+            "exit": t.exit_index,
+            "entryPrice": round(t.entry_price, 2),
+            "exitPrice": round(t.exit_price, 2),
+            "pnlPct": round(t.pnl_pct, 2),
+            "bars": t.bars,
+            "exitRule": t.exit_rule_id,
+        }
+        for t in trips
+        if not t.open
+    ]
 
 
 def _stats(sim: Simulation) -> dict:
@@ -162,7 +158,7 @@ def _stats(sim: Simulation) -> dict:
         "winRatePct": round(s.win_rate_pct, 1),
         "maxDrawdownPct": round(s.max_drawdown_pct, 2),
         "sharpe": round(s.sharpe, 2),
-        "roundTrips": s.sells,
+        "roundTrips": s.round_trips,
         "openPosition": s.open_position,
     }
 
@@ -185,13 +181,12 @@ def presets(conn, asset, end: datetime) -> dict:
         start = end - timedelta(days=cfg["days"])
         df = _load(conn, asset, cfg["timeframe"], strategy, start, end)
         sim = simulate(df, strategy, start, cfg["timeframe"])
-        closes = sim.ohlc[:, 3]
         out[preset_id] = {
             "timeframe": cfg["timeframe"],
             "from": sim.times[0].date().isoformat(),
             "to": sim.times[-1].date().isoformat(),
             **_stats(sim),
-            "buyHoldPct": round((closes[-1] / closes[0] - 1) * 100, 2),
+            "buyHoldPct": round(sim.stats.benchmark_return_pct, 2),
             "curve": _curve(sim, 40),
         }
     return out
@@ -268,7 +263,7 @@ def replay(conn, asset, end: datetime) -> dict:
 
 
 def builder(conn, asset, end: datetime) -> dict:
-    """Candles where "RSI < 30" AND / OR "close below the lower band" hold over 3 months of 4h."""
+    """Candles where "RSI < 30" AND / OR "close below the lower band" hold over a year of 4h."""
     strategy = _strategy([_rule("b", "buy", [RSI_LOW, BAND_LOW])])
     start = end - timedelta(days=BUILDER_DAYS)
     df = _load(conn, asset, "4h", strategy, start, end)

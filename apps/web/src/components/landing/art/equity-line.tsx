@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { areaPath, extent, linePath, linear, pad } from "@/lib/landing/geometry"
-import { useInView, useReducedMotion } from "../motion"
+import { areaPath, extent, linePath, linear, pad } from "@/lib/chart-geometry"
+import { useInView, useReducedMotion } from "@/lib/motion"
 
 const W = 240
 const H = 64

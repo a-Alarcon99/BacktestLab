@@ -4,7 +4,7 @@ import { useRef } from "react"
 import { TriangleAlertIcon } from "lucide-react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { findConflicts, specOf, type Condition } from "@/lib/strategy"
-import { useShouldPlay } from "../motion"
+import { useShouldPlay } from "@/lib/motion"
 
 // M3 · Contradictions: two opposite conditions are joined with AND, bump into each other and the
 // real check of the editor (`findConflicts`) explains why the rule could never buy.

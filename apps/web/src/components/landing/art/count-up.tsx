@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useI18n } from "@/components/i18n/locale-provider"
-import { easeOutCubic } from "@/lib/landing/geometry"
+import { easeOutCubic } from "@/lib/chart-geometry"
 import { num } from "../format"
-import { useInView, useReducedMotion } from "../motion"
+import { useInView, useReducedMotion } from "@/lib/motion"
 
 /**
  * M1 · A figure that counts up from 0 when it scrolls into view. The server renders the final

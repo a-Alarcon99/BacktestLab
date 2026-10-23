@@ -1,6 +1,6 @@
 """Market data sync, for a machine whose IP Binance doesn't ban (e.g. your own PC).
 
-Started and stopped by hand (see docs/12-sincronizacion-local.md):
+Started and stopped by hand (see docs/03-datos-de-mercado.md, Parte D):
 
     cd apps/api
     .venv\\Scripts\\python -m app.sync      # Ctrl+C stops it

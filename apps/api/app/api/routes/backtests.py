@@ -70,6 +70,6 @@ def run_backtest(
         df = get_candles(conn, asset, req.timeframe, fetch_start, end)
         df = df[df.index < end]
         sim = simulate(df, req.strategy, start, req.timeframe)
-        return to_result(sim, req.strategy.initial_capital)
+        return to_result(sim)
     finally:
         _slots.release()
