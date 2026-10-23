@@ -615,6 +615,16 @@
 .bt-exporting .bt-play * {
   animation: none !important;
 }
+/* Folded sections (the rules panel) are exported open, with their canvas unclipped. */
+.bt-exporting [data-collapsible],
+html.bt-printing [data-collapsible] {
+  grid-template-rows: 1fr !important;
+  transition: none !important;
+}
+.bt-exporting [data-rules] [data-canvas],
+html.bt-printing [data-rules] [data-canvas] {
+  max-height: none !important;
+}
 /* Hidden before the image is measured, so it leaves no blank space. */
 .bt-exporting [data-export-skip],
 .bt-exporting [data-print-hide] {

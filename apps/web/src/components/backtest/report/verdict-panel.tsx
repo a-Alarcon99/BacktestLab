@@ -12,10 +12,10 @@ import { Reveal, toneBg, toneSoft, toneText } from "./parts"
 const delay = (s: number) => ({ "--bt-delay": `${s}s` }) as CSSProperties
 
 /** Circular seal drawn around the verdict's icon: ✓ good, ! mixed, ✕ bad. */
-function Seal({ tone }: { tone: Tone }) {
+function Seal({ tone, className }: { tone: Tone; className?: string }) {
   const stroke = tone === "good" ? "var(--up)" : tone === "bad" ? "var(--down)" : "var(--chart-3)"
   return (
-    <svg viewBox="0 0 64 64" className="size-16 shrink-0 sm:size-20" aria-hidden>
+    <svg viewBox="0 0 64 64" className={cn("shrink-0", className ?? "size-16 sm:size-20")} aria-hidden>
       <circle cx={32} cy={32} r={28} fill="none" stroke="var(--border)" strokeWidth={4} />
       <circle
         className="bt-draw"
@@ -215,65 +215,53 @@ function warningText(w: Warning, f: ReplayFormats, t: <T>(es: T, en: T) => T) {
   }
 }
 
-export function VerdictPanel({
-  verdict,
+/** The four verdict points, each with its tone, figure and a plain sentence. */
+function VerdictItems({ verdict, className }: { verdict: Verdict; className?: string }) {
+  const { t, f } = useReplayText()
+  return (
+    <ul className={cn("grid gap-2", className)}>
+      {verdict.items.map((item, k) => {
+        const text = itemText(item, f, t)
+        return (
+          <li key={item.id} className={cn("bt-rise flex gap-3 rounded-lg p-3", toneSoft(item.tone))} style={delay(0.6 + k * 0.12)}>
+            <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", toneBg(item.tone))} />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="flex flex-wrap items-baseline justify-between gap-x-2 font-semibold">
+                {text.title}
+                <span className={cn("num font-bold", toneText(item.tone))}>{text.badge}</span>
+              </p>
+              <p className="text-caption text-muted-foreground">{text.text}</p>
+            </div>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/** Reliability warnings and the comparison with the previous run. */
+export function VerdictNotes({
   warnings,
   previous,
   result,
+  only,
 }: {
-  verdict: Verdict
   warnings: Warning[]
   previous: PreviousRun | null
   result: BacktestResult
+  /** Just one of the two (the side verdict keeps the warnings, the strip under the charts the comparison). */
+  only?: "warnings" | "previous"
 }) {
   const { locale, t, f } = useReplayText()
-  const [title, lead] = headlineText(verdict.headline, t)
   return (
-    <Reveal label={t("Veredicto", "Verdict")} className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
-      <div className="flex items-center gap-4">
-        <Seal tone={verdict.tone} />
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className={cn("bt-fade text-[11px] font-semibold tracking-wide uppercase", toneText(verdict.tone))} style={delay(0.2)}>
-            {t("Veredicto", "Verdict")}
-          </p>
-          <h3 className="bt-rise text-heading leading-tight font-bold tracking-tight text-balance" style={delay(0.3)}>
-            {title}
-          </h3>
-          <p className="bt-rise text-muted-foreground" style={delay(0.45)}>
-            {lead}
-          </p>
-        </div>
-      </div>
-
-      <ul className="grid gap-2 sm:grid-cols-2">
-        {verdict.items.map((item, k) => {
-          const text = itemText(item, f, t)
-          return (
-            <li
-              key={item.id}
-              className={cn("bt-rise flex gap-3 rounded-lg p-3", toneSoft(item.tone))}
-              style={delay(0.6 + k * 0.12)}
-            >
-              <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", toneBg(item.tone))} />
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <p className="flex flex-wrap items-baseline justify-between gap-x-2 font-semibold">
-                  {text.title}
-                  <span className={cn("num font-bold", toneText(item.tone))}>{text.badge}</span>
-                </p>
-                <p className="text-caption text-muted-foreground">{text.text}</p>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-
-      {warnings.length > 0 && (
+    <>
+      {warnings.length > 0 && only !== "previous" && (
         <div className="bt-rise flex flex-col gap-1.5 rounded-lg border border-chart-3/40 bg-chart-3/10 p-3" style={delay(1.1)}>
           <p className="flex items-center gap-1.5 text-caption font-bold">
             <AlertTriangleIcon className="size-3.5 text-chart-3" />
             {t("Tómalo con cuidado", "Take it with care")}
           </p>
-          <ul className="flex list-disc flex-col gap-1 pl-5 text-caption text-muted-foreground">
+          <ul className="flex flex-col gap-1 text-caption text-muted-foreground">
             {warnings.map((w) => (
               <li key={w.id}>{warningText(w, f, t)}</li>
             ))}
@@ -281,7 +269,7 @@ export function VerdictPanel({
         </div>
       )}
 
-      {previous && (
+      {previous && only !== "warnings" && (
         <div className="bt-rise flex items-start gap-2.5 rounded-lg border p-3 text-caption" style={delay(1.2)}>
           <HistoryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div className="flex min-w-0 flex-col gap-0.5">
@@ -318,6 +306,61 @@ export function VerdictPanel({
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+/**
+ * The verdict. On top of the report (`side` false) it is a card with the seal, the four points
+ * and the notes. `side` is the wide-screen version that lives in the column next to the charts:
+ * stacked, with the warnings but not the comparison with the previous run, which goes in a
+ * strip under the charts (`VerdictNotes only="previous"`).
+ */
+export function VerdictPanel({
+  verdict,
+  warnings,
+  previous,
+  result,
+  side = false,
+}: {
+  verdict: Verdict
+  warnings: Warning[]
+  previous: PreviousRun | null
+  result: BacktestResult
+  side?: boolean
+}) {
+  const { t } = useReplayText()
+  const [title, lead] = headlineText(verdict.headline, t)
+  const head = (
+    <div className={cn("flex gap-4", side ? "flex-col items-start gap-3" : "items-center")}>
+      <Seal tone={verdict.tone} className={side ? "size-14" : undefined} />
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className={cn("bt-fade text-[11px] font-semibold tracking-wide uppercase", toneText(verdict.tone))} style={delay(0.2)}>
+          {t("Veredicto", "Verdict")}
+        </p>
+        <h3 className={cn("bt-rise leading-tight font-bold tracking-tight text-balance", side ? "text-title" : "text-heading")} style={delay(0.3)}>
+          {title}
+        </h3>
+        <p className={cn("bt-rise text-muted-foreground", side && "text-caption")} style={delay(0.45)}>
+          {lead}
+        </p>
+      </div>
+    </div>
+  )
+  if (side) {
+    return (
+      <Reveal label={t("Veredicto", "Verdict")} className="flex flex-col gap-4">
+        {head}
+        <VerdictItems verdict={verdict} />
+        <VerdictNotes only="warnings" warnings={warnings} previous={previous} result={result} />
+      </Reveal>
+    )
+  }
+  return (
+    <Reveal label={t("Veredicto", "Verdict")} className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:p-5">
+      {head}
+      <VerdictItems verdict={verdict} className="sm:grid-cols-2" />
+      <VerdictNotes warnings={warnings} previous={previous} result={result} />
     </Reveal>
   )
 }

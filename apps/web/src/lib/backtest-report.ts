@@ -1,4 +1,4 @@
-import type { BacktestRecord, BacktestRecordV2, BacktestRequest, BacktestResult, RoundTrip } from "./backtests.ts"
+import type { BacktestRecord, BacktestRecordV2, BacktestRequest, BacktestResult, BacktestTrade, RoundTrip } from "./backtests.ts"
 import { niceTicks } from "./chart-geometry.ts"
 
 // Pure logic of the backtest replay and report: running figures while it plays, the verdict, the
@@ -281,6 +281,13 @@ export function resultBins(pcts: number[], target = 10) {
 export function splitDuration(seconds: number) {
   const total = Math.max(0, Math.round(seconds / 60))
   return { days: Math.floor(total / 1440), hours: Math.floor((total % 1440) / 60), minutes: total % 60 }
+}
+
+// --- One trade's orders --------------------------------------------------------------------------
+
+/** Every buy and sell of the trade `k` (index in `roundTrips`), in the order they filled. */
+export function tripOrders(result: BacktestResult, k: number): BacktestTrade[] {
+  return result.trades.filter((order) => order.roundTrip === k)
 }
 
 // --- CSV ---------------------------------------------------------------------------------------

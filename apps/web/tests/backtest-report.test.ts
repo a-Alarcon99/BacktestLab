@@ -12,6 +12,7 @@ import {
   riskTone,
   splitDuration,
   tradesCsv,
+  tripOrders,
   verdict,
 } from "../src/lib/backtest-report.ts";
 import type { BacktestRecord, BacktestResult, RoundTrip } from "../src/lib/backtests.ts";
@@ -185,4 +186,19 @@ test("trades CSV in both languages", () => {
   assert.ok(es.includes('1;2026-01-01 08:00;2026-01-02 12:00;64210,5;66000;1000,00;25,37;2,54;7;28,00;"Venta; regla 1";Cerrada'));
   const en = tradesCsv([trip], "en", headers, () => "Sell rule 1", () => "Closed");
   assert.ok(en.includes("1,2026-01-01 08:00,2026-01-02 12:00,64210.5,66000,1000.00,25.37,2.54,7,28.00,Sell rule 1,Closed"));
+});
+
+test("a trade's orders are exactly its buys and sells, in order", () => {
+  let seen = 0;
+  result.roundTrips.forEach((trip, k) => {
+    const orders = tripOrders(result, k);
+    assert.equal(orders.filter((o) => o.side === "buy").length, trip.buys);
+    assert.equal(orders.filter((o) => o.side === "sell").length, trip.sells);
+    assert.equal(orders[0].side, "buy");
+    assert.equal(orders[0].time, trip.entryTime);
+    for (let i = 1; i < orders.length; i++) assert.ok(orders[i].time >= orders[i - 1].time);
+    seen += orders.length;
+  });
+  assert.equal(seen, result.trades.length);
+  assert.deepEqual(tripOrders(result, result.roundTrips.length), []);
 });

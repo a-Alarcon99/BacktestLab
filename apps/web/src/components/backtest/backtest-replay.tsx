@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { AlertTriangleIcon, CheckCircle2Icon, LoaderCircleIcon, Maximize2Icon, MaximizeIcon, Minimize2Icon, PauseIcon, RotateCcwIcon } from "lucide-react"
+import { cn } from "cn"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { AssetAvatar } from "@/components/market/asset-avatar"
 import { LimitCta } from "@/components/plan/plan-usage"
@@ -11,18 +12,21 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 import { liveFigures, liveTrack, previousRun, reliabilityWarnings, verdict } from "@/lib/backtest-report"
 import { describeBacktestError, recordFromResult, runBacktest, type BacktestRequest, type BacktestResult } from "@/lib/backtests"
 import { estimateCandles, isIntraday } from "@/lib/candles"
-import { clamp, easeInOutCubic, lerp } from "@/lib/chart-geometry"
+import { clamp, easeInOutCubic, lerp, phase } from "@/lib/chart-geometry"
 import { formatDate } from "@/lib/format"
-import { useHeight, useReducedMotion, useWidth } from "@/lib/motion"
+import { useHeight, useMediaQuery, useReducedMotion, useWidth } from "@/lib/motion"
 import { addBacktest, useRecentBacktests } from "@/lib/storage/backtests"
 import { AdvancedMetrics, TradesTable } from "./report/trades-table"
 import { DistributionChart, PeriodChart, TradeResultsChart, WinLossChart } from "./report/charts"
 import { ExportMenu } from "./report/export-menu"
 import { KeyMetrics } from "./report/key-metrics"
 import { InfoHint } from "./report/parts"
-import { VerdictPanel } from "./report/verdict-panel"
+import { RulesPanel } from "./report/rules-panel"
+import { TradeDetailDialog } from "./report/trade-detail"
+import { VerdictNotes, VerdictPanel } from "./report/verdict-panel"
+import { DockLayer, dockFade, dockLanded, dockRest } from "./replay/dock"
 import { useReplayText } from "./replay/format"
-import { LiveKpis, PlaybackBar } from "./replay/live-panels"
+import { LiveKpis, PlaybackBar, useLiveTiles } from "./replay/live-panels"
 import { liveWindow, MIN_VIEW, PriceChart, type View } from "./replay/price-chart"
 import { DrawdownChart, EquityChart } from "./replay/series-charts"
 import { SPEEDS, useSince, usePlayback, type Speed } from "./replay/use-playback"
@@ -34,11 +38,28 @@ export type ReplayRun = BacktestRequest & {
   recordId?: string
 }
 
-/** Size of the dialog while it shows a replay (wide, nearly full height). */
-export const REPLAY_DIALOG_CLASS = "w-[min(84rem,calc(100vw-1.5rem))] h-[calc(100dvh-2rem)]"
+/** A replay opens filling the whole window; `ExpandButton` shrinks it to a wide dialog and back. */
+export const REPLAY_DIALOG_CLASS = "h-dvh max-h-dvh w-screen rounded-none border-0"
 
-/** Seconds of the transition from the replay to the report (zoom out, light sweep, verdict). */
-const SETTLE = { zoom: 0.9, sweep: 0.5, verdict: 0.9, end: 2.4 }
+/**
+ * Seconds of the transition from the replay to the report: zoom out, light sweep, verdict, and
+ * the dock (the live tiles fly to the key figures while the charts take their column).
+ */
+const SETTLE = { zoom: 0.9, sweep: 0.5, verdict: 0.9, dock: { start: 1, length: 1.5 }, end: 2.7 }
+
+// The settle animation re-renders the whole view every frame; the heavy parts only depend on
+// things that stay put by then, so they skip those renders.
+const MemoPriceChart = memo(PriceChart)
+const MemoEquityChart = memo(EquityChart)
+const MemoDrawdownChart = memo(DrawdownChart)
+const MemoKeyMetrics = memo(KeyMetrics)
+const MemoTradeResultsChart = memo(TradeResultsChart)
+const MemoDistributionChart = memo(DistributionChart)
+const MemoPeriodChart = memo(PeriodChart)
+const MemoWinLossChart = memo(WinLossChart)
+const MemoTradesTable = memo(TradesTable)
+const MemoRulesPanel = memo(RulesPanel)
+const MemoAdvancedMetrics = memo(AdvancedMetrics)
 
 type RunState =
   | { status: "loading" }
@@ -71,6 +92,7 @@ function BacktestReplayDialog({
 function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void }) {
   const [state, setState] = useState<RunState>({ status: "loading" })
   const [attempt, setAttempt] = useState(0)
+  const [expanded, setExpanded] = useState(true)
   const { locale, t, f } = useReplayText()
 
   useEffect(() => {
@@ -92,12 +114,14 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
     return () => controller.abort()
   }, [run, attempt, locale])
 
-  if (state.status === "ready") return <ReplayView run={run} result={state.result} recordId={state.recordId} onClose={onClose} />
+  if (state.status === "ready") {
+    return <ReplayView run={run} result={state.result} recordId={state.recordId} onClose={onClose} expanded={expanded} onExpandedChange={setExpanded} />
+  }
 
   const estimate = estimateCandles(run.from, run.to, run.timeframe)
   return (
     <>
-      <ReplayHeader run={run} candles={`≈ ${f.count.format(estimate)} ${t("velas", "candles")}`}>
+      <ReplayHeader run={run} candles={`≈ ${f.count.format(estimate)} ${t("velas", "candles")}`} expanded={expanded} onExpandedChange={setExpanded}>
         {state.status === "loading" ? (
           <Badge variant="primary" className="hidden sm:inline-flex">
             <LoaderCircleIcon className="animate-spin" />
@@ -175,33 +199,45 @@ function LoadingArt() {
   )
 }
 
-/** Fills the whole window instead of the dialog's usual margins (inline styles on the popup, undone on shrink or close). */
-function ExpandButton() {
+/**
+ * Switches the dialog between the whole window (its default size) and a wide dialog with margins
+ * (inline styles on the popup, undone when it goes back to full or closes).
+ */
+function ExpandButton({ expanded, onChange }: { expanded: boolean; onChange: (expanded: boolean) => void }) {
   const { t } = useI18n()
   const ref = useRef<HTMLButtonElement>(null)
-  const [expanded, setExpanded] = useState(false)
   useEffect(() => {
     const dialog = ref.current?.closest<HTMLElement>('[data-slot="dialog-content"]')
-    if (!dialog) return
-    if (!expanded) return
-    const keys = ["width", "height", "maxHeight", "borderRadius", "borderWidth"] as const
+    if (!dialog || expanded) return
     const { style } = dialog
-    style.width = "100vw"
-    style.height = "100dvh"
-    style.maxHeight = "100dvh"
-    style.borderRadius = "0"
-    style.borderWidth = "0"
-    return () => keys.forEach((key) => style.removeProperty(key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)))
+    style.width = "min(84rem, calc(100vw - 1.5rem))"
+    style.height = "calc(100dvh - 2rem)"
+    style.maxHeight = "calc(100dvh - 2rem)"
+    style.borderRadius = "var(--radius-xl)"
+    style.borderWidth = "1px"
+    return () => ["width", "height", "max-height", "border-radius", "border-width"].forEach((key) => style.removeProperty(key))
   }, [expanded])
   const label = expanded ? t("Reducir ventana", "Shrink window") : t("Ampliar ventana", "Enlarge window")
   return (
-    <Button ref={ref} type="button" variant="ghost" size="icon-sm" aria-label={label} title={label} aria-pressed={expanded} onClick={() => setExpanded((v) => !v)} data-print-hide>
+    <Button ref={ref} type="button" variant="ghost" size="icon-sm" aria-label={label} title={label} aria-pressed={expanded} onClick={() => onChange(!expanded)} data-print-hide>
       {expanded ? <Minimize2Icon /> : <Maximize2Icon />}
     </Button>
   )
 }
 
-function ReplayHeader({ run, candles, children }: { run: ReplayRun; candles: string; children: React.ReactNode }) {
+function ReplayHeader({
+  run,
+  candles,
+  expanded,
+  onExpandedChange,
+  children,
+}: {
+  run: ReplayRun
+  candles: string
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
+  children: React.ReactNode
+}) {
   const { locale, t } = useI18n()
   return (
     <header className="flex items-start gap-3 border-b px-4 py-3 md:px-5">
@@ -216,7 +252,7 @@ function ReplayHeader({ run, candles, children }: { run: ReplayRun; candles: str
         </DialogDescription>
       </div>
       {children}
-      <ExpandButton />
+      <ExpandButton expanded={expanded} onChange={onExpandedChange} />
       <DialogClose data-print-hide />
     </header>
   )
@@ -231,11 +267,15 @@ function ReplayView({
   result,
   recordId,
   onClose,
+  expanded,
+  onExpandedChange,
 }: {
   run: ReplayRun
   result: BacktestResult
   recordId?: string
   onClose: () => void
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
 }) {
   const { locale, t, f } = useReplayText()
   const reduced = useReducedMotion()
@@ -253,8 +293,10 @@ function ReplayView({
   const columnWidth = useWidth(chartColumn)
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollHeight = useHeight(scrollRef)
+  const dockRef = useRef<HTMLDivElement>(null)
   const [userView, setUserView] = useState<View | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  const [detail, setDetail] = useState<number | null>(null)
 
   const request: BacktestRequest = { symbol: run.symbol, timeframe: run.timeframe, from: run.from, to: run.to, strategy: run.strategy }
   const summary = useMemo(
@@ -282,7 +324,7 @@ function ReplayView({
     const end = clamp(pos + 2, windowCount, steps)
     return { start: end - windowCount, end }
   }
-  const full: View = { start: 0, end: steps }
+  const full = useMemo<View>(() => ({ start: 0, end: steps }), [steps])
   let view: View
   if (!finished) view = liveView(playback.pos)
   else if (since < SETTLE.zoom) {
@@ -297,31 +339,45 @@ function ReplayView({
   const lastN = result.trades.findLastIndex((trade) => trade.index <= index && trade.index < Math.ceil(revealed))
   const lastTrade = lastN >= 0 ? { trade: result.trades[lastN], n: lastN } : null
   const showVerdict = finished && since >= SETTLE.verdict
+  // The dock: 0 until the tiles start to fly, 1 once they landed (and with reduced motion).
+  const tiles = useLiveTiles(figures)
+  const dockU = finished ? phase(since, SETTLE.dock.start, SETTLE.dock.length) : 0
+  const docking = dockU > 0 && dockU < 1
+  // Wide screens: the column that held the tiles takes the verdict once they have left. Narrow
+  // ones: the column folds away and the verdict stays on top of the report.
+  const wide = useMediaQuery("(min-width: 1024px)")
+  const sideVerdict = wide && finished && dockU >= 0.3
+  const asideShown = wide || dockU < 1
+  const rest = finished && !wide ? dockRest(dockU) : 1
 
   const restart = () => {
     setUserView(null)
     setSelected(null)
+    setDetail(null)
     reportRef.current?.closest("[data-report-scroll]")?.scrollTo({ top: 0 })
     playback.restart()
   }
 
-  const focusTrip = (k: number) => {
-    const trip = result.roundTrips[k]
-    if (!trip) return
-    setSelected(k)
-    const length = trip.exitIndex - trip.entryIndex + 1
-    const span = clamp(Math.max(length * 3, MIN_VIEW * 2, 40), Math.min(MIN_VIEW, steps), steps)
-    const centre = (trip.entryIndex + trip.exitIndex + 1) / 2
-    const start = clamp(centre - span / 2, 0, steps - span)
-    setUserView({ start, end: start + span })
-    stageRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" })
-  }
+  const focusTrip = useCallback(
+    (k: number) => {
+      const trip = result.roundTrips[k]
+      if (!trip) return
+      setSelected(k)
+      const length = trip.exitIndex - trip.entryIndex + 1
+      const span = clamp(Math.max(length * 3, MIN_VIEW * 2, 40), Math.min(MIN_VIEW, steps), steps)
+      const centre = (trip.entryIndex + trip.exitIndex + 1) / 2
+      const start = clamp(centre - span / 2, 0, steps - span)
+      setUserView({ start, end: start + span })
+      stageRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" })
+    },
+    [result, steps, reduced]
+  )
 
   // Keyboard: space play/pause, ←/→ move (Shift: previous/next trade), 1/2/4 speed, End/S summary, R replay.
   const keys = useRef<(e: KeyboardEvent) => void>(() => {})
   useEffect(() => {
     keys.current = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || detail !== null) return
       const onControl = e.target instanceof HTMLElement && e.target.closest("button, [role=slider], summary, a, tr[tabindex]")
       if (finished) {
         if (e.key === "r" || e.key === "R") restart()
@@ -368,7 +424,7 @@ function ReplayView({
 
   return (
     <>
-      <ReplayHeader run={run} candles={`${f.count.format(result.candleCount)} ${t("velas", "candles")}`}>
+      <ReplayHeader run={run} candles={`${f.count.format(result.candleCount)} ${t("velas", "candles")}`} expanded={expanded} onExpandedChange={onExpandedChange}>
         <Badge variant={status.variant} className="hidden sm:inline-flex">
           {status.icon}
           {status.text}
@@ -381,7 +437,7 @@ function ReplayView({
             {run.symbol}/USDT · {run.strategy.name} · {run.timeframe} · {formatDate(run.from, locale)} → {formatDate(run.to, locale)}
           </p>
 
-          {finished && (
+          {finished && !wide && (
             <div
               className="grid transition-[grid-template-rows,opacity] duration-700 ease-[cubic-bezier(.22,1,.36,1)]"
               style={{ gridTemplateRows: showVerdict ? "1fr" : "0fr", opacity: showVerdict ? 1 : 0 }}
@@ -394,132 +450,162 @@ function ReplayView({
             </div>
           )}
 
-          <section
-            ref={stageRef}
-            aria-label={t("Reproducción del backtest", "Backtest replay")}
-            className="relative scroll-mt-4 overflow-hidden rounded-xl border bg-card shadow-xl shadow-primary/5 ring-1 ring-foreground/[0.03]"
-          >
-            {finished && (
-              <header className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-                <h3 className="flex items-center gap-1.5 font-bold">
-                  {t("Precio, capital y caídas", "Price, equity and drawdowns")}
-                  <InfoHint title={t("Cómo leer estos gráficos", "How to read these charts")}>
-                    <p>
-                      {t(
-                        "Arriba, las velas con cada compra (▲) y venta (▼). Las zonas sombreadas son el tiempo con dinero invertido: verdes si esa operación ganó, rojas si perdió.",
-                        "Top: the candles with every buy (▲) and sell (▼). Shaded zones are the time with money invested: green if that trade won, red if it lost."
-                      )}
-                    </p>
-                    <p>
-                      {t(
-                        "En medio, tu capital (azul) frente a comprar al inicio y mantener (gris discontinuo). Abajo, cuánto estaba por debajo de su máximo en cada momento.",
-                        "Middle: your capital (blue) against buying at the start and holding (dashed grey). Bottom: how far below its peak it was at each moment."
-                      )}
-                    </p>
-                    <p>{t("Rueda del ratón: zoom. Arrastrar: mover. Doble clic: ver todo.", "Mouse wheel: zoom. Drag: move. Double click: see all.")}</p>
-                  </InfoHint>
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="hidden text-[11px] text-muted-foreground md:inline" data-print-hide>
-                    {t("Rueda: zoom · Arrastra: mover", "Wheel: zoom · Drag: move")}
-                  </span>
-                  {userView && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => {
-                        setUserView(null)
-                        setSelected(null)
-                      }}
-                      data-print-hide
-                    >
-                      <MaximizeIcon data-icon="inline-start" />
-                      {t("Ver todo", "See all")}
-                    </Button>
-                  )}
+          <div ref={dockRef} className="relative flex flex-col gap-4">
+            <section
+              ref={stageRef}
+              aria-label={t("Reproducción del backtest", "Backtest replay")}
+              className="relative scroll-mt-4 overflow-hidden rounded-xl border bg-card shadow-xl shadow-primary/5 ring-1 ring-foreground/[0.03]"
+            >
+              {finished && (
+                <header className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+                  <h3 className="flex items-center gap-1.5 font-bold">
+                    {t("Precio, capital y caídas", "Price, equity and drawdowns")}
+                    <InfoHint title={t("Cómo leer estos gráficos", "How to read these charts")}>
+                      <p>
+                        {t(
+                          "Arriba, las velas con cada compra (▲) y venta (▼). Las zonas sombreadas son el tiempo con dinero invertido: verdes si esa operación ganó, rojas si perdió.",
+                          "Top: the candles with every buy (▲) and sell (▼). Shaded zones are the time with money invested: green if that trade won, red if it lost."
+                        )}
+                      </p>
+                      <p>
+                        {t(
+                          "En medio, tu capital (azul) frente a comprar al inicio y mantener (gris discontinuo). Abajo, cuánto estaba por debajo de su máximo en cada momento.",
+                          "Middle: your capital (blue) against buying at the start and holding (dashed grey). Bottom: how far below its peak it was at each moment."
+                        )}
+                      </p>
+                      <p>{t("Rueda del ratón: zoom. Arrastrar: mover. Doble clic: ver todo.", "Mouse wheel: zoom. Drag: move. Double click: see all.")}</p>
+                    </InfoHint>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="hidden text-[11px] text-muted-foreground md:inline" data-print-hide>
+                      {t("Rueda: zoom · Arrastra: mover", "Wheel: zoom · Drag: move")}
+                    </span>
+                    {userView && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => {
+                          setUserView(null)
+                          setSelected(null)
+                        }}
+                        data-print-hide
+                      >
+                        <MaximizeIcon data-icon="inline-start" />
+                        {t("Ver todo", "See all")}
+                      </Button>
+                    )}
+                  </div>
+                </header>
+              )}
+              <div
+                className={cn("grid", asideShown && "lg:grid-cols-[minmax(0,1fr)_19rem]")}
+              >
+                <div ref={chartColumn} className="flex min-w-0 flex-col divide-y">
+                  <MemoPriceChart
+                    result={result}
+                    rules={run.strategy.rules}
+                    intraday={intraday}
+                    view={view}
+                    revealed={revealed}
+                    cps={playback.cps}
+                    live={live}
+                    height={priceHeight || targetPrice}
+                    highlight={selected}
+                    onViewChange={finished && since >= SETTLE.zoom ? setUserView : undefined}
+                    label={panelLabel(
+                      `Velas de ${run.symbol}/USDT con las compras y ventas de la estrategia`,
+                      `${run.symbol}/USDT candles with the strategy's buys and sells`
+                    )}
+                  />
+                  <MemoEquityChart
+                    result={result}
+                    capital={capital}
+                    view={finished ? view : full}
+                    revealed={revealed}
+                    live={live}
+                    height={equityHeight}
+                    interactive={finished}
+                    label={panelLabel("Capital de la estrategia frente a comprar y mantener", "Strategy equity against buy and hold")}
+                  />
+                  <MemoDrawdownChart
+                    result={result}
+                    view={finished ? view : full}
+                    revealed={revealed}
+                    cps={playback.cps}
+                    live={live}
+                    height={drawdownHeight + (finished ? 16 : 0)}
+                    interactive={finished}
+                    showLongest={finished}
+                    label={panelLabel("Caída del capital desde su máximo", "Equity drawdown from its peak")}
+                  />
                 </div>
-              </header>
-            )}
-            <div className="grid lg:grid-cols-[minmax(0,1fr)_15rem]">
-              <div ref={chartColumn} className="flex min-w-0 flex-col divide-y">
-                <PriceChart
-                  result={result}
-                  rules={run.strategy.rules}
-                  intraday={intraday}
-                  view={view}
-                  revealed={revealed}
-                  cps={playback.cps}
-                  live={live}
-                  height={priceHeight || targetPrice}
-                  highlight={selected}
-                  onViewChange={finished && since >= SETTLE.zoom ? setUserView : undefined}
-                  label={panelLabel(
-                    `Velas de ${run.symbol}/USDT con las compras y ventas de la estrategia`,
-                    `${run.symbol}/USDT candles with the strategy's buys and sells`
-                  )}
-                />
-                <EquityChart
-                  result={result}
-                  capital={capital}
-                  view={finished ? view : full}
-                  revealed={revealed}
-                  live={live}
-                  height={equityHeight}
-                  interactive={finished}
-                  label={panelLabel("Capital de la estrategia frente a comprar y mantener", "Strategy equity against buy and hold")}
-                />
-                <DrawdownChart
-                  result={result}
-                  view={finished ? view : full}
-                  revealed={revealed}
-                  cps={playback.cps}
-                  live={live}
-                  height={drawdownHeight + (finished ? 16 : 0)}
-                  interactive={finished}
-                  showLongest={finished}
-                  label={panelLabel("Caída del capital desde su máximo", "Equity drawdown from its peak")}
-                />
-              </div>
-              <aside className="border-t p-3 lg:border-t-0 lg:border-l">
-                <LiveKpis figures={figures} lastTrade={lastTrade} result={result} />
-              </aside>
-            </div>
-            {/* The light sweep of the transition to the report. */}
-            {finished && since > SETTLE.sweep && since < SETTLE.end && (
-              <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-                <div className="bt-sweep absolute inset-0 bg-[linear-gradient(90deg,transparent_30%,color-mix(in_oklch,var(--primary)_14%,transparent)_50%,transparent_70%)]" />
-              </div>
-            )}
-            <p className="sr-only" aria-live="polite">
-              {live && lastTrade
-                ? `${lastTrade.trade.side === "buy" ? t("Compra", "Buy") : t("Venta", "Sell")} ${f.price(lastTrade.trade.price)}`
-                : ""}
-            </p>
-          </section>
-
-          {finished && (
-            <>
-              <KeyMetrics result={result} capital={capital} />
-              <div className="grid gap-4 md:grid-cols-2">
-                <TradeResultsChart result={result} selected={selected} onSelect={focusTrip} />
-                <DistributionChart result={result} />
-                <PeriodChart result={result} />
-                <WinLossChart result={result} />
-              </div>
-              <div data-export-skip>
-                <TradesTable result={result} rules={run.strategy.rules} intraday={intraday} selected={selected} onSelect={focusTrip} />
-              </div>
-              <div data-export-skip>
-                <AdvancedMetrics result={result} />
-              </div>
-              <p className="num text-caption text-muted-foreground">
-                {t(
-                  `Capital inicial ${f.usdt(capital)} · comisión ${f.amount.format(run.strategy.feePct)} % por orden · cada señal se ejecuta a la apertura de la vela siguiente · ${f.count.format(result.candleCount)} velas reales. Resultados sobre datos históricos: no garantizan resultados futuros.`,
-                  `Initial capital ${f.usdt(capital)} · ${f.amount.format(run.strategy.feePct)}% fee per order · each signal fills at the next candle's open · ${f.count.format(result.candleCount)} real candles. Results on historical data: they don't guarantee future results.`
+                {asideShown && (
+                  <aside
+                    className="relative grid overflow-hidden border-t lg:border-t-0 lg:border-l"
+                    style={wide ? undefined : { gridTemplateRows: `minmax(0, ${rest}fr)` }}
+                  >
+                    <div
+                      className="min-h-0 overflow-hidden p-3 lg:absolute lg:inset-0 lg:overflow-y-auto"
+                      style={docking && !sideVerdict ? { opacity: 1 - dockFade(dockU) } : undefined}
+                    >
+                      {sideVerdict ? (
+                        <VerdictPanel side verdict={summary.verdict} warnings={summary.warnings} previous={previous} result={result} />
+                      ) : (
+                        <LiveKpis tiles={tiles} lastTrade={lastTrade} result={result} />
+                      )}
+                    </div>
+                  </aside>
                 )}
+              </div>
+              {/* The light sweep of the transition to the report. */}
+              {finished && since > SETTLE.sweep && since < SETTLE.end && (
+                <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+                  <div className="bt-sweep absolute inset-0 bg-[linear-gradient(90deg,transparent_30%,color-mix(in_oklch,var(--primary)_14%,transparent)_50%,transparent_70%)]" />
+                </div>
+              )}
+              <p className="sr-only" aria-live="polite">
+                {live && lastTrade
+                  ? `${lastTrade.trade.side === "buy" ? t("Compra", "Buy") : t("Venta", "Sell")} ${f.price(lastTrade.trade.price)}`
+                  : ""}
               </p>
-            </>
-          )}
+            </section>
+
+            {finished && (
+              <>
+                {wide && previous && (
+                  // Its room is kept from the start so nothing moves while the tiles fly.
+                  <div
+                    aria-hidden={!sideVerdict}
+                    className="flex flex-col gap-2 transition-opacity duration-700"
+                    style={{ opacity: sideVerdict ? 1 : 0 }}
+                  >
+                    <VerdictNotes only="previous" warnings={summary.warnings} previous={previous} result={result} />
+                  </div>
+                )}
+                <MemoKeyMetrics result={result} capital={capital} landed={dockLanded(dockU)} />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <MemoTradeResultsChart result={result} selected={selected} onSelect={focusTrip} />
+                  <MemoDistributionChart result={result} />
+                  <MemoPeriodChart result={result} />
+                  <MemoWinLossChart result={result} />
+                </div>
+                <div data-export-skip>
+                  <MemoTradesTable result={result} rules={run.strategy.rules} intraday={intraday} selected={selected} onSelect={focusTrip} onDetail={setDetail} />
+                </div>
+                <MemoRulesPanel rules={run.strategy.rules} />
+                <div data-export-skip>
+                  <MemoAdvancedMetrics result={result} />
+                </div>
+                <p className="num text-caption text-muted-foreground">
+                  {t(
+                    `Capital inicial ${f.usdt(capital)} · comisión ${f.amount.format(run.strategy.feePct)} % por orden · cada señal se ejecuta a la apertura de la vela siguiente · ${f.count.format(result.candleCount)} velas reales. Resultados sobre datos históricos: no garantizan resultados futuros.`,
+                    `Initial capital ${f.usdt(capital)} · ${f.amount.format(run.strategy.feePct)}% fee per order · each signal fills at the next candle's open · ${f.count.format(result.candleCount)} real candles. Results on historical data: they don't guarantee future results.`
+                  )}
+                </p>
+              </>
+            )}
+            {docking && <DockLayer u={dockU} host={dockRef} tiles={tiles} />}
+          </div>
         </div>
       </div>
 
@@ -537,6 +623,8 @@ function ReplayView({
           <PlaybackBar playback={playback} result={result} intraday={intraday} />
         )}
       </footer>
+
+      <TradeDetailDialog k={detail} result={result} rules={run.strategy.rules} intraday={intraday} onClose={() => setDetail(null)} />
     </>
   )
 }

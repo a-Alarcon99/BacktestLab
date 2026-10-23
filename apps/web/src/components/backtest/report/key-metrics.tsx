@@ -4,6 +4,7 @@ import type { CSSProperties } from "react"
 import { cn } from "cn"
 import type { BacktestResult } from "@/lib/backtests"
 import { sign, useReplayText } from "../replay/format"
+import { DOCK_TARGETS } from "../replay/live-panels"
 import { InfoHint, Reveal } from "./parts"
 
 type Metric = {
@@ -17,8 +18,13 @@ type Metric = {
   info: string
 }
 
-/** The key figures of the run, each with a plain sentence and a "what does it mean?". */
-export function KeyMetrics({ result, capital }: { result: BacktestResult; capital: number }) {
+const docked = new Set<string>(Object.values(DOCK_TARGETS))
+
+/**
+ * The key figures of the run, each with a plain sentence and a "what does it mean?". The cards
+ * that a live tile of the replay flies to are held back until it lands (`landed`, 0 → 1).
+ */
+export function KeyMetrics({ result, capital, landed = 1 }: { result: BacktestResult; capital: number; landed?: number }) {
   const { t, f } = useReplayText()
   const m = result.metrics
   const s = result.stats
@@ -234,8 +240,9 @@ export function KeyMetrics({ result, capital }: { result: BacktestResult; capita
         {metrics.map((metric, k) => (
           <div
             key={metric.id}
-            className="bt-rise flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3"
-            style={{ "--bt-delay": `${k * 0.04}s` } as CSSProperties}
+            data-metric={metric.id}
+            className={cn("flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-3", !docked.has(metric.id) && "bt-rise")}
+            style={{ "--bt-delay": `${k * 0.04}s`, ...(docked.has(metric.id) && landed < 1 ? { opacity: landed } : null) } as CSSProperties}
           >
             <dt className="flex items-center justify-between gap-1 text-caption font-semibold text-muted-foreground">
               <span className="truncate">{metric.label}</span>

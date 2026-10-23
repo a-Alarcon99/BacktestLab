@@ -6,12 +6,15 @@ import type { BacktestTrade, RoundTrip } from "@/lib/backtests"
 import { describeConditions, describeSize, ruleName, type Rule } from "@/lib/strategy"
 import { useReplayText } from "./format"
 
+/** The rule an order came from (OR alternatives are saved as `<id>~<n>`). */
+export const findRule = (rules: Rule[], id: string) => rules.find((r) => r.id === id || id.startsWith(`${r.id}~`))
+
 /** "Regla de venta 2 · 100 % de la posición" for a rule id (or "Regla eliminada"). */
 export function useRuleLabel(rules: Rule[]) {
   const { locale, t } = useReplayText()
   return (id: string | null) => {
     if (id === null) return t("Sigue abierta", "Still open")
-    const rule = rules.find((r) => r.id === id || id.startsWith(`${r.id}~`))
+    const rule = findRule(rules, id)
     if (!rule) return t("Regla eliminada", "Deleted rule")
     const position = rules.filter((r) => r.side === rule.side).indexOf(rule) + 1
     const name = ruleName(rule.side, position, locale)
@@ -41,7 +44,7 @@ export function TradeTooltip({
 }) {
   const { locale, t, f } = useReplayText()
   const buy = trade.side === "buy"
-  const rule = rules.find((r) => r.id === trade.ruleId || trade.ruleId.startsWith(`${r.id}~`))
+  const rule = findRule(rules, trade.ruleId)
   const label = useRuleLabel(rules)
   const date = (iso: string) => (intraday ? `${f.tradeDateTime.format(new Date(iso))} UTC` : f.date.format(new Date(iso)))
   const closes = !buy && trip && !trip.open && trip.exitTime === trade.time

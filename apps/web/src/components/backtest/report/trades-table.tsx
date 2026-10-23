@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ListIcon, LocateFixedIcon } from "lucide-react"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import type { BacktestResult } from "@/lib/backtests"
@@ -13,19 +13,24 @@ import { InfoHint, Reveal } from "./parts"
 const PAGE = 50
 type SortKey = "n" | "pnl" | "duration"
 
-/** Every trade of the run; clicking a row shows it on the price chart. */
+/**
+ * Every trade of the run. Each row has two buttons: one marks the trade on the price chart, the
+ * other opens its breakdown (every buy and sell).
+ */
 export function TradesTable({
   result,
   rules,
   intraday,
   selected,
   onSelect,
+  onDetail,
 }: {
   result: BacktestResult
   rules: Rule[]
   intraday: boolean
   selected: number | null
   onSelect: (trip: number) => void
+  onDetail: (trip: number) => void
 }) {
   const { t, f } = useReplayText()
   const label = useRuleLabel(rules)
@@ -61,8 +66,8 @@ export function TradesTable({
           {t("Todas las operaciones", "All trades")}
           <InfoHint title={t("Operaciones", "Trades")}>
             {t(
-              "Cada fila va de la primera compra a la venta que cierra la posición y puede incluir varias compras y ventas parciales (columna «Compras / ventas»). Los precios son medios si hubo varias compras o ventas, sin comisiones; el resultado sí las descuenta. Pulsa una fila para verla en el gráfico.",
-              "Each row goes from the first buy to the sell that closes the position and can include several buys and partial sells (the “Buys / sells” column). Prices are averages when there were several buys or sells, without fees; the result does deduct them. Click a row to see it on the chart."
+              "Cada fila va de la primera compra a la venta que cierra la posición y puede incluir varias compras y ventas parciales (columna «Compras / ventas»). Los precios son medios si hubo varias compras o ventas, sin comisiones; el resultado sí las descuenta. Con los botones de cada fila la marcas en el gráfico o abres el desglose de sus compras y ventas.",
+              "Each row goes from the first buy to the sell that closes the position and can include several buys and partial sells (the “Buys / sells” column). Prices are averages when there were several buys or sells, without fees; the result does deduct them. With the buttons on each row you mark it on the chart or open the breakdown of its buys and sells."
             )}
           </InfoHint>
         </h3>
@@ -79,7 +84,7 @@ export function TradesTable({
         <p className="py-6 text-center text-caption text-muted-foreground">{t("No hubo operaciones.", "There were no trades.")}</p>
       ) : (
         <div className="bt-fade -mx-4 overflow-x-auto">
-          <table className="num w-full min-w-[46rem] text-left text-caption">
+          <table className="num w-full min-w-[50rem] text-left text-caption">
             <thead className="border-y bg-muted/40 text-muted-foreground">
               <tr>
                 {header("n", "#", "w-12")}
@@ -100,25 +105,16 @@ export function TradesTable({
                 <th scope="col" className="px-3 py-2 font-semibold">
                   {t("Cerrada por", "Closed by")}
                 </th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold" data-print-hide>
+                  <span className="sr-only">{t("Acciones", "Actions")}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.slice(0, shown).map(({ trip, k }) => (
                 <tr
                   key={k}
-                  tabIndex={0}
-                  onClick={() => onSelect(k)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      onSelect(k)
-                    }
-                  }}
-                  className={cn(
-                    "cursor-pointer border-b transition-colors outline-none last:border-0 hover:bg-muted/50 focus-visible:bg-muted/60",
-                    trip.open && "bg-primary/5",
-                    selected === k && "bg-accent/60"
-                  )}
+                  className={cn("border-b transition-colors last:border-0 hover:bg-muted/50", trip.open && "bg-primary/5", selected === k && "bg-accent/60")}
                 >
                   <td className="px-3 py-2 text-muted-foreground">{k + 1}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{date(trip.entryTime)}</td>
@@ -139,6 +135,29 @@ export function TradesTable({
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">{f.duration(trip.durationSeconds)}</td>
                   <td className="max-w-48 truncate px-3 py-2 text-muted-foreground">{trip.open ? t("Sigue abierta", "Still open") : label(trip.exitRuleId)}</td>
+                  <td className="px-3 py-1.5 text-right whitespace-nowrap" data-print-hide>
+                    <Button
+                      type="button"
+                      variant={selected === k ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      aria-label={t(`Marcar la operación ${k + 1} en el gráfico`, `Mark trade ${k + 1} on the chart`)}
+                      title={t("Marcar en el gráfico", "Mark on the chart")}
+                      aria-pressed={selected === k}
+                      onClick={() => onSelect(k)}
+                    >
+                      <LocateFixedIcon />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t(`Ver el desglose de la operación ${k + 1}`, `See the breakdown of trade ${k + 1}`)}
+                      title={t("Ver compras y ventas", "See buys and sells")}
+                      onClick={() => onDetail(k)}
+                    >
+                      <ListIcon />
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>

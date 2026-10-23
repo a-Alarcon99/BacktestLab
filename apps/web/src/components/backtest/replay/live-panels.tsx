@@ -11,21 +11,25 @@ import { clamp } from "@/lib/chart-geometry"
 import { sign, useReplayText } from "./format"
 import { SPEEDS, type Playback, type Speed } from "./use-playback"
 
-function Tile({
-  label,
-  value,
-  sub,
-  tone,
-  className,
-}: {
+export type TileSpec = {
+  id: "equity" | "benchmark" | "drawdown" | "wins" | "position"
   label: string
   value: React.ReactNode
   sub?: React.ReactNode
   tone?: "up" | "down"
-  className?: string
-}) {
+}
+
+/**
+ * The live tiles that have a twin among the report's key figures: when the replay ends they fly
+ * there (see `dock.tsx`). Tile id → `Metric.id` of `report/key-metrics.tsx`.
+ */
+export const DOCK_TARGETS = { equity: "return", benchmark: "benchmark", drawdown: "drawdown", wins: "winrate" } as const
+export type DockId = keyof typeof DOCK_TARGETS
+export const dockIds = Object.keys(DOCK_TARGETS) as DockId[]
+
+export function Tile({ label, value, sub, tone, className, id }: Omit<TileSpec, "id"> & { id?: TileSpec["id"]; className?: string }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-0.5 bg-card px-3 py-2.5", className)}>
+    <div data-tile={id} className={cn("flex min-w-0 flex-col gap-0.5 bg-card px-3 py-2.5", className)}>
       <dt className="truncate text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</dt>
       <dd className={cn("num truncate text-base leading-tight font-bold tracking-tight sm:text-title", tone === "up" && "text-up", tone === "down" && "text-down")}>
         {value}
@@ -35,13 +39,59 @@ function Tile({
   )
 }
 
+/** The account figures at the playback position, as tile contents. */
+export function useLiveTiles(figures: LiveFigures): TileSpec[] {
+  const { t, f } = useReplayText()
+  return [
+    {
+      id: "equity",
+      label: t("Capital", "Equity"),
+      value: f.usdt(figures.equity),
+      sub: <span className={cn(sign(figures.returnPct) === "up" && "text-up", sign(figures.returnPct) === "down" && "text-down")}>{f.signedPct(figures.returnPct, 2)}</span>,
+    },
+    {
+      id: "benchmark",
+      label: t("Vs. comprar y mantener", "Vs. buy and hold"),
+      value: f.pts(figures.vsBenchmark),
+      tone: sign(Math.abs(figures.vsBenchmark) < 0.05 ? 0 : figures.vsBenchmark),
+      sub: t(`Mercado ${f.signedPct(figures.benchmarkReturnPct)}`, `Market ${f.signedPct(figures.benchmarkReturnPct)}`),
+    },
+    {
+      id: "drawdown",
+      label: t("Caída máxima", "Max drawdown"),
+      value: figures.maxDrawdownPct > 0 ? f.signedPct(-figures.maxDrawdownPct) : f.pct(0),
+      tone: figures.maxDrawdownPct > 0 ? "down" : undefined,
+      sub: t(`Ahora ${f.signedPct(-figures.drawdownPct)}`, `Now ${f.signedPct(-figures.drawdownPct)}`),
+    },
+    {
+      id: "wins",
+      label: t("Operaciones ganadas", "Winning trades"),
+      value: figures.closed ? `${f.count.format(figures.wins)} / ${f.count.format(figures.closed)}` : "—",
+      sub: t(
+        `${f.plural(figures.buys, "compra", "compras")} · ${f.plural(figures.sells, "venta", "ventas")}`,
+        `${f.plural(figures.buys, "buy", "buys")} · ${f.plural(figures.sells, "sell", "sells")}`
+      ),
+    },
+    {
+      id: "position",
+      label: t("Posición", "Position"),
+      value: figures.openTrip ? t("Abierta", "Open") : t("Sin posición", "Flat"),
+      tone: figures.openTrip ? sign(figures.openChangePct) : undefined,
+      sub:
+        figures.openTrip && figures.openChangePct !== null
+          ? t(`Precio ${f.signedPct(figures.openChangePct)} desde la compra`, `Price ${f.signedPct(figures.openChangePct)} since the buy`)
+          : t("Esperando señal de compra", "Waiting for a buy signal"),
+    },
+  ]
+}
+
 /** Account figures at the playback position, plus a ticker with the last order. */
 export function LiveKpis({
-  figures,
+  tiles,
   lastTrade,
   result,
 }: {
-  figures: LiveFigures
+  tiles: TileSpec[]
   lastTrade: { trade: BacktestTrade; n: number } | null
   result: BacktestResult
 }) {
@@ -50,41 +100,9 @@ export function LiveKpis({
   const closes = lastTrade && lastTrade.trade.side === "sell" && trip && !trip.open && trip.exitTime === lastTrade.trade.time
   return (
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3 lg:grid-cols-1">
-      <Tile
-        label={t("Capital", "Equity")}
-        value={f.usdt(figures.equity)}
-        sub={<span className={cn(sign(figures.returnPct) === "up" && "text-up", sign(figures.returnPct) === "down" && "text-down")}>{f.signedPct(figures.returnPct, 2)}</span>}
-      />
-      <Tile
-        label={t("Vs. comprar y mantener", "Vs. buy and hold")}
-        value={f.pts(figures.vsBenchmark)}
-        tone={sign(Math.abs(figures.vsBenchmark) < 0.05 ? 0 : figures.vsBenchmark)}
-        sub={t(`Mercado ${f.signedPct(figures.benchmarkReturnPct)}`, `Market ${f.signedPct(figures.benchmarkReturnPct)}`)}
-      />
-      <Tile
-        label={t("Caída máxima", "Max drawdown")}
-        value={figures.maxDrawdownPct > 0 ? f.signedPct(-figures.maxDrawdownPct) : f.pct(0)}
-        tone={figures.maxDrawdownPct > 0 ? "down" : undefined}
-        sub={t(`Ahora ${f.signedPct(-figures.drawdownPct)}`, `Now ${f.signedPct(-figures.drawdownPct)}`)}
-      />
-      <Tile
-        label={t("Operaciones ganadas", "Winning trades")}
-        value={figures.closed ? `${f.count.format(figures.wins)} / ${f.count.format(figures.closed)}` : "—"}
-        sub={t(
-          `${f.plural(figures.buys, "compra", "compras")} · ${f.plural(figures.sells, "venta", "ventas")}`,
-          `${f.plural(figures.buys, "buy", "buys")} · ${f.plural(figures.sells, "sell", "sells")}`
-        )}
-      />
-      <Tile
-        label={t("Posición", "Position")}
-        value={figures.openTrip ? t("Abierta", "Open") : t("Sin posición", "Flat")}
-        tone={figures.openTrip ? sign(figures.openChangePct) : undefined}
-        sub={
-          figures.openTrip && figures.openChangePct !== null
-            ? t(`Precio ${f.signedPct(figures.openChangePct)} desde la compra`, `Price ${f.signedPct(figures.openChangePct)} since the buy`)
-            : t("Esperando señal de compra", "Waiting for a buy signal")
-        }
-      />
+      {tiles.map((tile) => (
+        <Tile key={tile.id} {...tile} />
+      ))}
       <div className="relative flex min-h-16 flex-col justify-center overflow-hidden bg-card px-3 py-2.5 sm:col-span-1 lg:col-span-1">
         <dt className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{t("Última orden", "Last order")}</dt>
         {lastTrade ? (

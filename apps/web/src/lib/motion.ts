@@ -22,6 +22,19 @@ export function useReducedMotion() {
   )
 }
 
+/** True while the viewport matches a media query (false on the server render). */
+export function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia(query)
+      media.addEventListener("change", onChange)
+      return () => media.removeEventListener("change", onChange)
+    },
+    () => window.matchMedia(query).matches,
+    () => false
+  )
+}
+
 function subscribeVisibility(onChange: () => void) {
   document.addEventListener("visibilitychange", onChange)
   return () => document.removeEventListener("visibilitychange", onChange)
