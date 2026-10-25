@@ -21,6 +21,16 @@ export async function SiteFooter() {
           ))}
         </nav>
       </div>
+      <nav
+        aria-label={t("Información legal", "Legal information")}
+        className="container-page flex flex-wrap justify-center gap-x-6 gap-y-2 border-t py-4 text-caption text-muted-foreground"
+      >
+        {siteConfig.legal.map((item) => (
+          <Link key={item.href} href={href(item.href)} className="hover:text-foreground">
+            {item.label[locale]}
+          </Link>
+        ))}
+      </nav>
     </footer>
   )
 }

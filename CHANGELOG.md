@@ -1,5 +1,14 @@
 # Changelog
 
+## Sin publicar — Fase 1: páginas legales
+
+- Nuevas páginas indexables `/privacy`, `/terms`, `/cookies` y `/legal` (es/en), con maquetación común
+  (`components/legal/legal-page.tsx`). Son borradores pendientes de revisión jurídica; los datos del titular
+  (`siteConfig.operator` en `config/site.ts`) son **marcadores que hay que rellenar** antes de publicar.
+- Pie de página con una fila de enlaces legales; el alta exige marcar «Acepto los términos y la política de privacidad».
+- Cookies: solo las estrictamente necesarias o de preferencia, sin analítica y por tanto sin banner.
+- Las cuatro páginas se añaden al sitemap.
+
 ## 0.5.1 — Beta (2026-10-23)
 
 - Seguridad: se exige Node.js **24.22.1** o superior (`engines` en `apps/web/package.json`), que corrige las
