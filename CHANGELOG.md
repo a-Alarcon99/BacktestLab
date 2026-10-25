@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.5.1 — Beta (2026-10-22)
+## 0.5.1 — Beta (2026-10-23)
+
+- Seguridad: se exige Node.js **24.22.1** o superior (`engines` en `apps/web/package.json`), que corrige las
+  vulnerabilidades de octubre de 2026 (descompresor Brotli con ejecución remota de código, DNS y
+  validación TLS). Hay que usar la misma versión en Vercel (Settings → Node.js Version: 24.x) y en local.
+- Seguridad: la API exige `certifi>=2026.10.19`, que retira la raíz `emSign ECC Root CA - G3` del almacén
+  de confianza TLS.
+
+## 0.5.0 Fix — Beta (2026-10-22)
 
 - Backtest: botón **Ampliar ventana** junto a la «x» (el diálogo ocupa toda la pantalla; se deshace con el mismo botón).
 - Reproducción: las primeras velas ya no se ven deformadas. La escala de precio parte de un mínimo equivalente a
