@@ -10,6 +10,7 @@ here (and its counterpart in the web app's `lib/strategy.ts`). Each spec tells:
 - `warmup`: candles needed before its first valid value.
 - `evaluate`: boolean Series over the candles; `None` when it depends on the open position and
   the engine evaluates it candle by candle (price change since the entry).
+- `params`: the numeric settings the sensitivity test may vary (with the range each accepts).
 """
 
 from collections.abc import Callable
@@ -57,12 +58,26 @@ Constraint = Interval | Choice
 
 
 @dataclass(frozen=True)
+class Tunable:
+    """A numeric field of a condition the sensitivity test can vary, within [lo, hi]."""
+
+    field: str
+    lo: float
+    hi: float
+    integer: bool = False
+
+
+@dataclass(frozen=True)
 class ConditionSpec:
     label: Callable[[Any], str]
     subject: Callable[[Any], str]
     constraint: Callable[[Any], Constraint]
     warmup: Callable[[Any], int]
     evaluate: Callable[[pd.DataFrame, Any], pd.Series | None]
+    params: tuple[Tunable, ...] = ()
+
+
+_PERIOD = (2, 200)
 
 
 def _threshold(op: str, value: float) -> Interval:
@@ -151,6 +166,7 @@ _SPECS: dict[str, ConditionSpec] = {
             if c.op == "above"
             else ind.rsi(df.close, c.period) < c.value
         ),
+        params=(Tunable("period", *_PERIOD, integer=True), Tunable("value", 1, 99)),
     ),
     "ma-cross": ConditionSpec(
         label=lambda c: f"cruce {c.ma.upper()} {c.fast}/{c.slow}",
@@ -158,6 +174,7 @@ _SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: Choice(c.direction),
         warmup=lambda c: (c.slow if c.ma == "sma" else c.slow * 3) + 1,
         evaluate=_ma_cross,
+        params=(Tunable("fast", *_PERIOD, integer=True), Tunable("slow", *_PERIOD, integer=True)),
     ),
     "macd": ConditionSpec(
         label=lambda c: f"MACD ({c.fast}, {c.slow}, {c.signal})",
@@ -165,6 +182,11 @@ _SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: Choice(c.direction),
         warmup=lambda c: (c.slow + c.signal) * 3 + 1,
         evaluate=_macd,
+        params=(
+            Tunable("fast", *_PERIOD, integer=True),
+            Tunable("slow", *_PERIOD, integer=True),
+            Tunable("signal", *_PERIOD, integer=True),
+        ),
     ),
     "bollinger": ConditionSpec(
         label=lambda c: f"Bollinger ({c.period}, {c.std_dev:g})",
@@ -172,6 +194,7 @@ _SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: Choice(c.band),
         warmup=lambda c: c.period,
         evaluate=_bollinger,
+        params=(Tunable("period", *_PERIOD, integer=True), Tunable("std_dev", 0.5, 5)),
     ),
     "donchian": ConditionSpec(
         label=lambda c: f"Donchian ({c.period})",
@@ -179,6 +202,7 @@ _SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: Choice(c.direction),
         warmup=lambda c: c.period + 1,
         evaluate=_donchian,
+        params=(Tunable("period", *_PERIOD, integer=True),),
     ),
     "price-change": ConditionSpec(
         label=lambda c: (
@@ -190,6 +214,8 @@ _SPECS: dict[str, ConditionSpec] = {
         ),
         warmup=lambda c: 0 if c.lookback == "entry" else c.lookback,
         evaluate=_price_change,
+        # `lookback` is a number of candles, or "entry": the latter is skipped by `tunables`.
+        params=(Tunable("pct", 0.1, 1000), Tunable("lookback", 1, 200, integer=True)),
     ),
     "volume": ConditionSpec(
         label=lambda c: f"volumen (media {c.period})",
@@ -197,6 +223,7 @@ _SPECS: dict[str, ConditionSpec] = {
         constraint=lambda c: _threshold(c.op, c.multiple),
         warmup=lambda c: c.period + 1,
         evaluate=_volume,
+        params=(Tunable("multiple", 0.1, 100), Tunable("period", *_PERIOD, integer=True)),
     ),
     "periodic": ConditionSpec(
         label=lambda c: {"day": "cada día", "week": "cada semana", "month": "cada mes"}[c.every],
@@ -264,6 +291,7 @@ def _with_options(base: ConditionSpec) -> ConditionSpec:
         constraint=base.constraint,
         warmup=warmup,
         evaluate=evaluate,
+        params=base.params,
     )
 
 

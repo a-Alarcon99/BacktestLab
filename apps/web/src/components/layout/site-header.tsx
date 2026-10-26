@@ -9,7 +9,8 @@ import { UserMenu } from "./user-menu"
 
 /**
  * Sticky top bar: brand + primary nav on the left, session actions on the right.
- * Below `lg` the nav collapses into a full-screen menu.
+ * The nav sits next to the logo from 880 px up (laptops with display scaling are narrower than
+ * 1024 px); below `lg` the menu button also gives access to it, plus the account actions.
  */
 export async function SiteHeader() {
   const { locale, href } = await getI18n()
@@ -22,12 +23,12 @@ export async function SiteHeader() {
           {siteConfig.name}
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex">
+        <nav className="hidden items-center gap-0.5 min-[880px]:flex lg:gap-1">
           {siteConfig.nav.map((item) => (
             <Link
               key={item.href}
               href={href(item.href)}
-              className="rounded-md px-3 py-2 font-semibold transition-colors hover:bg-muted hover:text-primary"
+              className="rounded-md px-2 py-2 font-semibold transition-colors hover:bg-muted hover:text-primary lg:px-3"
             >
               {item.label[locale]}
             </Link>

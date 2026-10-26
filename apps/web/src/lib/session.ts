@@ -14,6 +14,10 @@ export type Me = {
     maxBacktestsTotal: number | null
     maxBacktestsPerDay: number | null
     historySize: number
+    /** Assets one multi-asset run may include (1 = not allowed). */
+    maxBatchItems: number
+    /** Synthetic paths one Monte Carlo run may simulate (0 = not allowed). */
+    maxMcPaths: number
     /** ISO end of paid access; `null` when the plan doesn't expire. */
     expiresAt: string | null
   }
@@ -62,6 +66,20 @@ export const getMe = () => current
 
 /** Identity bucket of the current view: changes on sign-in / sign-out. */
 export const meScope = (me: Me | undefined) => (me ? (me.user?.id ?? "guest") : undefined)
+
+/**
+ * Backtests left today and in total, whichever runs out first; `null` = unlimited. Display only:
+ * a re-run of something already paid for is free, which only the server knows.
+ */
+export function remainingBacktests(me: Me | undefined): number | null {
+  if (!me) return null
+  const { plan, usage } = me
+  const left = [
+    plan.maxBacktestsTotal === null ? null : plan.maxBacktestsTotal - usage.backtestsTotal,
+    plan.maxBacktestsPerDay === null ? null : plan.maxBacktestsPerDay - usage.backtestsToday,
+  ].filter((n): n is number => n !== null)
+  return left.length ? Math.max(0, Math.min(...left)) : null
+}
 
 /** "2 de 3" style description of a quota; `null` max = unlimited. */
 export function quotaText(used: number, max: number | null, locale: Locale = defaultLocale) {

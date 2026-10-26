@@ -18,6 +18,8 @@ export class LimitError extends Error {
   constructor(
     readonly kind: LimitKind,
     readonly max: number,
+    /** Backtest units the refused operation needed (1 for a single run). */
+    readonly needed = 1,
   ) {
     super(`limit reached: ${kind}`);
   }
@@ -30,26 +32,33 @@ const cap = (limit: number | null, multiplier: number) => (limit === null ? INT_
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-async function bumpCounter(tx: Tx, column: "strategies_created" | "backtests_total", key: string, max: number) {
-  if (max <= 0) return false;
+async function bumpCounter(
+  tx: Tx,
+  column: "strategies_created" | "backtests_total",
+  key: string,
+  max: number,
+  units = 1,
+) {
+  // A first insert of `units` has no row to compare with, so it is checked here.
+  if (max < units) return false;
   const col = sql.raw(column);
   const rows = await tx.execute(sql`
-    insert into usage_counters (subject_key, ${col}) values (${key}, 1)
+    insert into usage_counters (subject_key, ${col}) values (${key}, ${units})
     on conflict (subject_key) do update
-      set ${col} = usage_counters.${col} + 1, updated_at = now()
-      where usage_counters.${col} < ${max}
+      set ${col} = usage_counters.${col} + ${units}, updated_at = now()
+      where usage_counters.${col} + ${units} <= ${max}
     returning ${col}`);
   return rows.length > 0;
 }
 
-async function bumpDaily(tx: Tx, key: string, max: number) {
-  if (max <= 0) return false;
+async function bumpDaily(tx: Tx, key: string, max: number, units = 1) {
+  if (max < units) return false;
   const rows = await tx.execute(sql`
     insert into usage_daily (subject_key, day, backtests)
-    values (${key}, (now() at time zone 'utc')::date, 1)
+    values (${key}, (now() at time zone 'utc')::date, ${units})
     on conflict (subject_key, day) do update
-      set backtests = usage_daily.backtests + 1
-      where usage_daily.backtests < ${max}
+      set backtests = usage_daily.backtests + ${units}
+      where usage_daily.backtests + ${units} <= ${max}
     returning backtests`);
   return rows.length > 0;
 }
@@ -70,10 +79,12 @@ export function requestHash(value: unknown): string {
 }
 
 /**
- * Charges one backtest to the caller, or throws `LimitError`. A request this subject already
- * paid for (same digest) is a re-run of its own history and is free: results are deterministic.
+ * Charges `units` backtests to the caller (one per asset of a multi-asset run; the server works
+ * the number out from the request, never the client), or throws `LimitError` without charging
+ * anything. A request this subject already paid for (same digest) is a re-run of its own history
+ * and is free: results are deterministic.
  */
-export async function consumeBacktest(identity: Identity, hash: string): Promise<{ charged: boolean }> {
+export async function consumeBacktest(identity: Identity, hash: string, units = 1): Promise<{ charged: boolean }> {
   const { plan } = identity;
   return db.transaction(async (tx) => {
     const seen = await tx
@@ -85,30 +96,35 @@ export async function consumeBacktest(identity: Identity, hash: string): Promise
 
     for (const { key, multiplier } of subjectsOf(identity)) {
       const total = cap(plan.maxBacktestsTotal, multiplier);
-      if (!(await bumpCounter(tx, "backtests_total", key, total)))
-        throw new LimitError("backtests_total", plan.maxBacktestsTotal ?? total);
+      if (!(await bumpCounter(tx, "backtests_total", key, total, units)))
+        throw new LimitError("backtests_total", plan.maxBacktestsTotal ?? total, units);
       const daily = cap(plan.maxBacktestsPerDay, multiplier);
-      if (!(await bumpDaily(tx, key, daily)))
-        throw new LimitError("backtests_daily", plan.maxBacktestsPerDay ?? daily);
+      if (!(await bumpDaily(tx, key, daily, units)))
+        throw new LimitError("backtests_daily", plan.maxBacktestsPerDay ?? daily, units);
     }
     await tx.insert(backtestRuns).values({ subjectKey: identity.key, requestHash: hash }).onConflictDoNothing();
     return { charged: true };
   });
 }
 
-/** Undoes `consumeBacktest` when the run failed on the server's side, not for user deletions. */
-export async function refundBacktest(identity: Identity, hash: string): Promise<void> {
+/**
+ * Undoes `consumeBacktest` (the same `units`) when the run failed on the server's side, not for
+ * user deletions. With `keepRun` only some units are given back (the assets of a batch that had
+ * nothing to run on) and the digest stays, so reopening that batch is still a free re-run.
+ */
+export async function refundBacktest(identity: Identity, hash: string, units = 1, keepRun = false): Promise<void> {
   await db.transaction(async (tx) => {
     for (const { key } of subjectsOf(identity)) {
       await tx.execute(sql`
-        update usage_counters set backtests_total = greatest(backtests_total - 1, 0) where subject_key = ${key}`);
+        update usage_counters set backtests_total = greatest(backtests_total - ${units}, 0) where subject_key = ${key}`);
       await tx.execute(sql`
-        update usage_daily set backtests = greatest(backtests - 1, 0)
+        update usage_daily set backtests = greatest(backtests - ${units}, 0)
         where subject_key = ${key} and day = (now() at time zone 'utc')::date`);
     }
-    await tx
-      .delete(backtestRuns)
-      .where(and(eq(backtestRuns.subjectKey, identity.key), eq(backtestRuns.requestHash, hash)));
+    if (!keepRun)
+      await tx
+        .delete(backtestRuns)
+        .where(and(eq(backtestRuns.subjectKey, identity.key), eq(backtestRuns.requestHash, hash)));
   });
 }
 

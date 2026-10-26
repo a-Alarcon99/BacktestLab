@@ -79,7 +79,7 @@ def _rule_for(request: Request, s: Settings) -> list[tuple[str, int, float]] | N
     path, method = request.url.path, request.method
     if path == "/health" or method == "OPTIONS":
         return None
-    if method == "POST" and path == "/backtests/run":
+    if method == "POST" and path in _BACKTEST_PATHS:
         return [
             ("bt-min", s.rate_limit_backtest_per_minute, 60),
             ("bt-hour", s.rate_limit_backtest_per_hour, 3600),
@@ -89,8 +89,11 @@ def _rule_for(request: Request, s: Settings) -> list[tuple[str, int, float]] | N
     return [("default", s.rate_limit_default_per_minute, 60)]
 
 
+_BACKTEST_PATHS = ("/backtests/run", "/backtests/batch")
+
+
 def path_is_backtest_run(request: Request) -> bool:
-    return request.method == "POST" and request.url.path == "/backtests/run"
+    return request.method == "POST" and request.url.path in _BACKTEST_PATHS
 
 
 def _has_valid_internal_key(request: Request, s: Settings) -> bool:
@@ -124,7 +127,7 @@ def make_rate_limit_middleware(
                 )
                 waits = [limiter.hit(f"{b}:{ip}", n, w) for b, n, w in checks]
                 # The global bucket is only charged for requests that passed the per-IP limits.
-                if not any(waits) and request.url.path == "/backtests/run":
+                if not any(waits) and path_is_backtest_run(request):
                     waits.append(
                         limiter.hit("bt-global", s.rate_limit_backtest_global_per_minute, 60)
                     )

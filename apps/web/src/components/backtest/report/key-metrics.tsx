@@ -166,8 +166,8 @@ export function KeyMetrics({ result, capital, landed = 1 }: { result: BacktestRe
           ? t(`La mejor aporta el ${f.pct(m.bestTradeSharePct, 0)} de las ganancias.`, `The best one makes ${f.pct(m.bestTradeSharePct, 0)} of the gains.`)
           : t("Sin operaciones ganadoras.", "No winning trades."),
       info: t(
-        "El resultado de la operación que más ganó y de la que más perdió. Si la mejor explica casi todo el beneficio, el resultado depende de un golpe de suerte.",
-        "The result of the trade that made the most and of the one that lost the most. If the best one explains almost all the profit, the result hinges on a lucky break."
+        "El resultado de la operación que más ganó y de la que más perdió. Si la mejor explica casi todo el beneficio, el resultado depende de una sola operación excepcional.",
+        "The result of the trade that made the most and of the one that lost the most. If the best one explains almost all the profit, the result hinges on a single exceptional trade."
       ),
     },
     {

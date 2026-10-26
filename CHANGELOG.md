@@ -1,6 +1,115 @@
 # Changelog
 
-## 0.5.1 — Beta (2026-10-22)
+## 0.6.0 — Beta (2026-10-26)
+
+### Corrección y mejora de las nuevas funcionalidades
+
+- **Gráficos interactivos en todos los resultados**: al pasar el ratón (o tocar) aparece una ficha con las cifras del punto,
+  la barra o la celda (kit común `components/backtest/robust/hover.tsx`: `useChartHover`, `ChartTip`, `Crosshair`). Incluye
+  la matriz de sensibilidad (resalta fila y columna), los gráficos finales de temporalidades, ventanas, varios activos y
+  Monte Carlo, las miniaturas de cada activo al terminar y el histograma y el anillo de aciertos del informe individual.
+- **Explicaciones**: bloque «Lectura de los resultados» con las cifras puestas en palabras y los conceptos clave
+  (`ReadingPanel`), y «?» con la explicación larga en cada criterio del veredicto y en las cifras principales. Lenguaje
+  más formal: fuera «ruina», «en cristiano» y «fue suerte».
+- **Sensibilidad**: «Δ precio» pasa a «Cambio de precio».
+- **Ventanas móviles**: las ventanas se reproducen **una tras otra** (antes se solapaban y el foco saltaba): zona iluminada
+  con borde en movimiento sobre el precio, tira numerada con la ventana en curso, ficha «Ventana en curso», barra
+  provisional, estela de las ventanas terminadas y efecto de reinicio.
+- **Varios activos**: triángulos más pequeños, estela luminosa y barrido tras el cabezal, y el resultado de cada operación
+  cerrada sube flotando desde su punto.
+- **Temporalidades**: botones «Órdenes de:» para elegir qué temporalidad muestra sus compras (▲) y ventas (▼), dibujadas en
+  el color de su línea; el ranking también la selecciona.
+- **Monte Carlo**: distribución lateral junto al abanico en la que cae cada simulación al terminar, contador en vivo, rango
+  probable (P5-P95) y gráfico de estabilidad de la estimación; zonas de caída «moderada / elevada / severa».
+
+### Monte Carlo
+
+- **Tus operaciones** (`mc-trades`): se ejecuta la estrategia una vez (1 backtest) y las operaciones cerradas se barajan o se
+  sacan al azar con repetición en un Web Worker del navegador: 0 peticiones extra, semilla determinista.
+- **Mercados sintéticos** (`mc-paths`, en `POST /backtests/batch`): bootstrap por bloques de velas enteras
+  (`app/strategies/montecarlo.py`), `simulate` por camino, respuesta agregada (bandas P5-P95 con puntos de control, 40 caminos,
+  retornos y caídas de cada camino). Semáforo propio (`max_concurrent_mc`), tope `max_mc_work` y `plans.max_mc_paths`
+  (migración 0013: free 100, pro 500, max/admin 1000, guest 0); coste fijo de 2 backtests.
+- Página `/backtests/montecarlo` con explicaciones animadas, ajustes en lenguaje llano, animación SVG (abanico de historias,
+  histograma y franja de riesgo que se asientan) y veredicto con semáforo.
+- Medido aquí: 200 caminos × 5 000 velas ≈ 3,6 s (estrategia de 2 reglas); falta medir en Render antes de subir topes.
+
+### Corrección y mejora de las animaciones
+
+- **Ventanas móviles**: cada prueba trae ahora un bloque «Cómo funciona» animado en su formulario y, en la reproducción, tres
+  paneles narrados (rango cortado en ventanas, la ventana en curso que **reinicia desde 100** y cómo acabó cada una); al
+  terminar, todas las ventanas se funden en un abanico con la mediana y el rango central.
+- **Temporalidades**: se eligen las que se quieren probar (hasta 4 además de la elegida; `timeframes` en la petición, vecinas
+  si falta). Reproducción con compras/ventas marcadas, caída desde máximos y ranking en vivo.
+- **Sensibilidad**: onda desde la variante original, números que suben y histograma en vivo; el resumen añade perfil por
+  parámetro, ganancia frente a caída, mejores y peores variantes, detalle con curva y tabla completa.
+- **Varios activos**: cada tarjeta muestra órdenes, caída, estado de posición y capital en vivo; el panel lateral resume el
+  conjunto; el resumen final añade cifras de riesgo, curvas superpuestas y ganancia frente a caída. Abrir el informe de un
+  activo ya no reproduce la animación.
+- El motor devuelve por simulación `finalCapital`, `profitFactor`, `exposurePct`, `avgTradePct`, `bestTradePct`,
+  `worstTradePct`, `drawdownCurve` y `marks`.
+- Lectura de velas tolerante a fallos de R2: conexión de 5 s, cortacircuitos de 30 s, copia en disco aunque esté caducada y
+  `503` claro (`CandleStoreError`) en vez de `500`.
+
+### Pruebas de robustez
+
+- **`/backtests` es ahora una cuadrícula de tarjetas** (Un activo · Varios activos · Ventanas móviles · Sensibilidad de
+  parámetros · Temporalidades vecinas · Historial); cada una abre su propia página (`/backtests/asset`, `/assets`,
+  `/windows`, `/sensitivity`, `/timeframes`, `/history`). Se quitan la tarjeta «Robustez» y la lista de últimos backtests
+  que había al final del hub (el historial vive en su página).
+- **Ventanas móviles**: la estrategia se reinicia (capital completo, sin posición) en tramos de L días cada S días del
+  rango. Cada ventana equivale a un backtest directo de ese tramo. Resultado: retorno, mantener, caída y órdenes por
+  ventana, % de ventanas rentables y que superan a mantener.
+- **Sensibilidad de parámetros**: el motor deriva los números de las condiciones (`ConditionSpec.params`), varía uno o
+  dos ±20 % en cinco niveles (hasta 25 variantes, descartando con `find_conflicts` las que se contradicen o dejan una
+  condición inválida) y devuelve la matriz. Meseta = robusto; pico aislado = sobreajuste.
+- **Temporalidades vecinas**: el mismo rango en la temporalidad elegida y hasta dos a cada lado (entre 10 y 100 000 velas).
+- Cada prueba tiene su **semáforo por criterio y una puntuación 0-100** (lógica pura en `lib/robustness-report.ts`, con
+  tests) y su animación sobre un único reloj: barras de ventanas que se dibujan sobre el precio y columnas de
+  retorno, mapa de calor que se rellena desde la variante original hacia fuera, y curvas de capital superpuestas.
+- Coste = una unidad de cupo por simulación (la calcula el servidor con `lib/robustness-plan.ts`, gemelo del código
+  Python); las simulaciones que no se pueden ejecutar se devuelven. Presupuesto de trabajo común (`MAX_BATCH_WORK`).
+- Historial: una entrada por prueba (`kind: "robust"`), reabrirla es gratis.
+- Topes por ejecución (`plans.max_batch_items`): free 5, pro 25, max 50. Nuevo plan interno `admin` sin límites
+  (migración `0012`, hay que aplicarla con `npm run db:migrate`; el usuario admin se asigna en `user_plans`).
+- La cabecera muestra el menú junto al logo desde 880 px (antes solo desde 1024 px).
+- Lectura de velas tolerante a fallos de R2: tiempo de conexión de 5 s, cortacircuitos de 30 s, copia en disco aunque esté caducada si R2 no responde y `503` claro (`CandleStoreError`, la web devuelve el cupo) en vez de `500` tras ~1 min.
+
+### Varios activos
+
+- **Backtest de varios activos** (`/backtests` ahora es un hub: Un activo · Varios activos · Robustez (próximamente) ·
+  Historial). La misma estrategia se ejecuta en cada activo con el **capital completo** (ejecuciones independientes,
+  no una cartera). Un activo con menos histórico empieza más tarde y se marca como tal; uno sin velas en el rango se
+  informa aparte y su cupo se devuelve.
+- Animación común: cuadrícula de mini-gráficos de capital frente a comprar y mantener con un único reloj y un
+  ranking en vivo cuyas barras se reordenan suavemente. Al terminar: veredicto de consistencia («rentable en 7/10,
+  supera a mantener en 4»), dispersión estrategia vs mantener, tabla ordenable (y CSV) y, al pulsar un activo, su
+  informe completo con el resultado ya en memoria (sin recalcular ni gastar cupo).
+- API: `POST /backtests/batch` (`kind: "assets"`), un lote a la vez (`MAX_CONCURRENT_BATCHES`), hasta
+  `MAX_BATCH_ITEMS` activos y presupuesto de trabajo `MAX_BATCH_WORK` (velas × simulaciones; 422 si se excede).
+- Cupo por unidades: cada activo consume un backtest (lo calcula el servidor); repetir el mismo lote, en cualquier
+  orden, es gratis. Tope de activos por plan en `plans.max_batch_items` (invitado 1, free 3, pro 10, max 20).
+- Límites iniciales algo más altos: invitado 3 backtests en total (antes 2), free 5 al día (antes 3).
+- Historial: un único registro por grupo. Migraciones `0010` y `0011` (hay que aplicarlas: `npm run db:migrate`).
+
+### Páginas legales
+
+- Nuevas páginas indexables `/privacy`, `/terms`, `/cookies` y `/legal` (es/en), con maquetación común
+  (`components/legal/legal-page.tsx`). Son borradores pendientes de revisión jurídica; los datos del titular
+  (`siteConfig.operator` en `config/site.ts`) son **marcadores que hay que rellenar** antes de publicar.
+- Pie de página con una fila de enlaces legales; el alta exige marcar «Acepto los términos y la política de privacidad».
+- Cookies: solo las estrictamente necesarias o de preferencia, sin analítica y por tanto sin banner.
+- Las cuatro páginas se añaden al sitemap.
+
+## 0.5.1 — Beta (2026-10-23)
+
+- Seguridad: se exige Node.js **24.22.1** o superior (`engines` en `apps/web/package.json`), que corrige las
+  vulnerabilidades de octubre de 2026 (descompresor Brotli con ejecución remota de código, DNS y
+  validación TLS). Hay que usar la misma versión en Vercel (Settings → Node.js Version: 24.x) y en local.
+- Seguridad: la API exige `certifi>=2026.10.19`, que retira la raíz `emSign ECC Root CA - G3` del almacén
+  de confianza TLS.
+
+## 0.5.0 Fix — Beta (2026-10-22)
 
 - Backtest: botón **Ampliar ventana** junto a la «x» (el diálogo ocupa toda la pantalla; se deshace con el mismo botón).
 - Reproducción: las primeras velas ya no se ven deformadas. La escala de precio parte de un mínimo equivalente a

@@ -70,14 +70,17 @@ function AuthForm({ mode }: { mode: Mode }) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({})
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; terms?: string }>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [accepted, setAccepted] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
     const next: typeof errors = {}
+    if (mode === "signup" && !accepted)
+      next.terms = t("Debes aceptar los términos y la política de privacidad.", "You must accept the terms and the privacy policy.")
     if (mode === "signup" && name.trim().length < 2) next.name = t("Escribe tu nombre.", "Enter your name.")
     if (!emailPattern.test(email.trim())) next.email = t("Introduce un correo válido.", "Enter a valid email.")
     if (mode === "signup" ? password.length < 8 || password.length > 128 : password.length === 0)
@@ -190,6 +193,32 @@ function AuthForm({ mode }: { mode: Mode }) {
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
+          {mode === "signup" && (
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-start gap-2 text-caption text-muted-foreground">
+                <input
+                  type="checkbox"
+                  name="terms"
+                  checked={accepted}
+                  onChange={(e) => setAccepted(e.target.checked)}
+                  aria-invalid={Boolean(errors.terms)}
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
+                />
+                <span>
+                  {t("Acepto los ", "I accept the ")}
+                  <Link href={href("/terms")} target="_blank" className="font-semibold text-primary hover:underline">
+                    {t("términos y condiciones", "terms and conditions")}
+                  </Link>
+                  {t(" y la ", " and the ")}
+                  <Link href={href("/privacy")} target="_blank" className="font-semibold text-primary hover:underline">
+                    {t("política de privacidad", "privacy policy")}
+                  </Link>
+                  .
+                </span>
+              </label>
+              {fieldError(errors.terms) && <p className="text-caption">{fieldError(errors.terms)}</p>}
+            </div>
+          )}
           {formError && (
             <p role="alert" className="rounded-lg bg-down-soft px-3 py-2.5 text-caption font-semibold text-down">
               {formError}

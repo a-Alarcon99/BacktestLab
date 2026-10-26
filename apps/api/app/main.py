@@ -13,6 +13,7 @@ from app.api.routes import assets, backtests, health
 from app.core.config import get_settings
 from app.core.db import pool
 from app.core.security import BodySizeLimitMiddleware, make_rate_limit_middleware
+from app.services.candle_store import CandleStoreError
 from app.services.candles import InvalidRangeError
 from app.services.market_data import ProviderBudgetError, ProviderDisabledError
 
@@ -85,6 +86,17 @@ def provider_disabled_handler(_: Request, __: ProviderDisabledError) -> JSONResp
     # 503 (not 502): the data is just not stored yet, and the web app refunds a 503 backtest.
     return JSONResponse(
         status_code=503, content={"detail": "Market data is not available right now"}
+    )
+
+
+@app.exception_handler(CandleStoreError)
+def candle_store_handler(_: Request, exc: CandleStoreError) -> JSONResponse:
+    logger.error("Candle storage error: %s", exc)
+    # 503 so the web app refunds the backtest; the data exists, it just cannot be read now.
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Candle storage is not reachable right now"},
+        headers={"Retry-After": "30"},
     )
 
 

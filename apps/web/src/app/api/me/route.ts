@@ -58,6 +58,8 @@ export async function GET(request: Request) {
         maxBacktestsTotal: plan.maxBacktestsTotal,
         maxBacktestsPerDay: plan.maxBacktestsPerDay,
         historySize: plan.historySize,
+        maxBatchItems: plan.maxBatchItems,
+        maxMcPaths: plan.maxMcPaths,
         expiresAt: identity.planExpiresAt?.toISOString() ?? null,
       },
       usage,

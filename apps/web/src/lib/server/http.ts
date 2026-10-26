@@ -11,5 +11,9 @@ export function limitResponse(error: LimitError) {
     backtests_total: "Has alcanzado el máximo de backtests de tu plan.",
     backtests_daily: "Has alcanzado el máximo de backtests de hoy. Vuelve mañana (UTC).",
   } as const;
-  return apiError(429, "limit_reached", messages[error.kind], { limit: error.kind, max: error.max });
+  const message =
+    error.needed > 1
+      ? `Esta ejecución necesita ${error.needed} backtests y no te quedan suficientes en tu plan.`
+      : messages[error.kind];
+  return apiError(429, "limit_reached", message, { limit: error.kind, max: error.max, needed: error.needed });
 }

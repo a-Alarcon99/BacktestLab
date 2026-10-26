@@ -143,12 +143,51 @@ export function PlaybackBar({
 }) {
   const { t, f } = useReplayText()
   const steps = result.candles.length
-  const track = useRef<HTMLDivElement>(null)
-  const dragging = useRef(false)
   const progress = playback.pos / steps
   const index = Math.max(0, Math.min(steps - 1, Math.ceil(playback.pos) - 1))
   const date = (intraday ? f.tradeDateTime : f.date).format(new Date(result.candles[index].time))
   const realCandle = Math.round(progress * result.candleCount)
+  return (
+    <TimelineBar
+      playback={playback}
+      steps={steps}
+      date={`${date}${intraday ? " UTC" : ""}`}
+      counter={`${t("Vela", "Candle")} ${f.count.format(realCandle)} / ${f.count.format(result.candleCount)} · ${Math.round(progress * 100)}${t(" %", "%")}`}
+      marks={result.roundTrips.map((trip, k) => (
+        <span
+          key={k}
+          className={cn("absolute inset-y-0", trip.open ? "bg-primary/40" : trip.pnl > 0 ? "bg-up/55" : "bg-down/55")}
+          style={{
+            left: `${(trip.entryIndex / steps) * 100}%`,
+            width: `max(2px, ${((trip.exitIndex - trip.entryIndex + 1) / steps) * 100}%)`,
+          }}
+        />
+      ))}
+    />
+  )
+}
+
+/**
+ * Play/pause, speed, draggable position and "see summary", for any replay. `date` and `counter`
+ * describe the position; `marks` are absolutely positioned spans drawn on the track.
+ */
+export function TimelineBar({
+  playback,
+  steps,
+  date,
+  counter,
+  marks,
+}: {
+  playback: Playback
+  steps: number
+  date: string
+  counter: string
+  marks?: React.ReactNode
+}) {
+  const { t } = useReplayText()
+  const track = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+  const progress = playback.pos / steps
 
   const seekAt = (clientX: number) => {
     const rect = track.current?.getBoundingClientRect()
@@ -216,16 +255,7 @@ export function PlaybackBar({
           className="group relative h-6 cursor-pointer touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-muted">
-            {result.roundTrips.map((trip, k) => (
-              <span
-                key={k}
-                className={cn("absolute inset-y-0", trip.open ? "bg-primary/40" : trip.pnl > 0 ? "bg-up/55" : "bg-down/55")}
-                style={{
-                  left: `${(trip.entryIndex / steps) * 100}%`,
-                  width: `max(2px, ${((trip.exitIndex - trip.entryIndex + 1) / steps) * 100}%)`,
-                }}
-              />
-            ))}
+            {marks}
             <span className="absolute inset-y-0 left-0 bg-primary/25" style={{ width: `${progress * 100}%` }} />
           </div>
           <span
@@ -234,14 +264,8 @@ export function PlaybackBar({
           />
         </div>
         <p className="num flex justify-between gap-3 text-[11px] text-muted-foreground">
-          <span className="truncate">
-            {date}
-            {intraday ? " UTC" : ""}
-          </span>
-          <span className="shrink-0">
-            {t("Vela", "Candle")} {f.count.format(realCandle)} / {f.count.format(result.candleCount)} · {Math.round(progress * 100)}
-            {t(" %", "%")}
-          </span>
+          <span className="truncate">{date}</span>
+          <span className="shrink-0">{counter}</span>
         </p>
       </div>
       <Button variant="outline" size="sm" onClick={playback.skip} className="self-end sm:self-auto">
