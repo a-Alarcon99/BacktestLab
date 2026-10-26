@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { backtestRuns } from "@/db/schema";
+import { parseBatchBody } from "@/lib/server/batch-input";
 import { apiError } from "@/lib/server/http";
 import { clientIp, isSameOrigin, resolveIdentity } from "@/lib/server/identity";
 import { requestHash } from "@/lib/server/quota";
@@ -9,6 +10,9 @@ import { enforce, perClient, tooManyRequests } from "@/lib/server/rate-limit";
 import { readJson } from "@/lib/server/strategy-input";
 
 export const maxDuration = 10;
+
+/** A multi-asset record is hashed the way the batch route hashed it (assets normalized and sorted). */
+const hashBodyOf = (body: object) => parseBatchBody(body)?.hashBody ?? body;
 
 /**
  * Called when a run is deleted from the history: it stops being a free re-run. The consumed quota
@@ -25,6 +29,6 @@ export async function POST(request: Request) {
   if (wait > 0) return tooManyRequests(wait);
   await db
     .delete(backtestRuns)
-    .where(and(eq(backtestRuns.subjectKey, identity.key), eq(backtestRuns.requestHash, requestHash(body))));
+    .where(and(eq(backtestRuns.subjectKey, identity.key), eq(backtestRuns.requestHash, requestHash(hashBodyOf(body)))));
   return new Response(null, { status: 204 });
 }

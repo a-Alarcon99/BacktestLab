@@ -168,6 +168,90 @@ class BacktestRequest(CamelModel):
     strategy: StrategyConfig
 
 
+class _BatchBase(CamelModel):
+    timeframe: Timeframe
+    from_: date = Field(alias="from")
+    to: date
+    strategy: StrategyConfig
+
+
+Symbol = Annotated[str, Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9]+$")]
+
+
+class AssetsBatchRequest(_BatchBase):
+    """Same strategy over several assets, each with the full capital (independent runs)."""
+
+    kind: Literal["assets"]
+    symbols: list[Symbol] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def _distinct_symbols(self) -> Self:
+        if len({s.upper() for s in self.symbols}) != len(self.symbols):
+            raise ValueError("Symbols must be distinct")
+        return self
+
+
+class WindowsBatchRequest(_BatchBase):
+    """Rolling windows: the strategy restarts (full capital) on each `length_days` slice."""
+
+    kind: Literal["windows"]
+    symbol: Symbol
+    length_days: int = Field(ge=2, le=3650)
+    step_days: int = Field(ge=1, le=3650)
+
+
+class SensitivityBatchRequest(_BatchBase):
+    """The strategy with one or two of its parameters varied around their values."""
+
+    kind: Literal["sensitivity"]
+    symbol: Symbol
+    # Ids from `robustness.tunables` ("<rule>:<condition>:<field>", indices in the rules).
+    params: list[Annotated[str, Field(max_length=64)]] = Field(min_length=1, max_length=2)
+
+    @model_validator(mode="after")
+    def _distinct_params(self) -> Self:
+        if len(set(self.params)) != len(self.params):
+            raise ValueError("Parameters must be distinct")
+        return self
+
+
+class TimeframesBatchRequest(_BatchBase):
+    """The same range on `timeframe` and on `timeframes` (its neighbours when omitted)."""
+
+    kind: Literal["timeframes"]
+    symbol: Symbol
+    # The timeframes to compare besides `timeframe`, which always takes part.
+    timeframes: list[Timeframe] | None = Field(default=None, min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def _distinct_timeframes(self) -> Self:
+        if self.timeframes is not None and len(set(self.timeframes)) != len(self.timeframes):
+            raise ValueError("Timeframes must be distinct")
+        return self
+
+
+class McPathsBatchRequest(_BatchBase):
+    """Monte Carlo: the strategy on `paths` synthetic price histories made of blocks of real candles."""
+
+    kind: Literal["mc-paths"]
+    symbol: Symbol
+    paths: int = Field(ge=10, le=1000)
+    # Consecutive candles moved together; None = about the square root of the candles.
+    block_length: int | None = Field(default=None, ge=1, le=1000)
+    # None = derived from the request, so the same request always gives the same paths.
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+
+
+BatchRequest = Annotated[
+    AssetsBatchRequest
+    | WindowsBatchRequest
+    | SensitivityBatchRequest
+    | TimeframesBatchRequest
+    | McPathsBatchRequest,
+    Field(discriminator="kind"),
+]
+
+
 class ReplayCandle(CamelModel):
     time: datetime
     open: float
@@ -331,3 +415,166 @@ class BacktestResult(CamelModel):
     periods: PeriodReturns
     metrics: BacktestMetrics
     stats: BacktestStats
+
+
+class BatchItem(CamelModel):
+    """Outcome for one asset. `error` is set (and `result` is None) when it could not run."""
+
+    symbol: str
+    result: BacktestResult | None = None
+    # "no-candles": not enough candles in the range for this asset (e.g. listed later).
+    error: Literal["no-candles"] | None = None
+    # First candle simulated (UTC); later than the requested start when the history begins later.
+    starts_at: datetime | None = None
+
+
+class AssetsBatchResult(CamelModel):
+    kind: Literal["assets"]
+    items: list[BatchItem]
+
+
+class OrderMark(CamelModel):
+    at: float
+    side: Literal["buy", "sell"]
+
+
+class RunSummary(CamelModel):
+    """Figures of one simulation without the replay data (robustness tests run many of them)."""
+
+    return_pct: float
+    benchmark_return_pct: float
+    max_drawdown_pct: float
+    orders: int
+    round_trips: int
+    win_rate_pct: float
+    sharpe: float
+    candle_count: int
+    final_capital: float = 0
+    # None when it is not defined (no losing trade, no closed trade).
+    profit_factor: float | None = None
+    # Candles with an open position, % of the range.
+    exposure_pct: float = 0
+    avg_trade_pct: float | None = None
+    best_trade_pct: float | None = None
+    worst_trade_pct: float | None = None
+    # Equity of the strategy and of buying and holding, normalized to 100, at evenly spaced
+    # points of the run (`CURVE_POINTS` of them).
+    curve: list[float]
+    benchmark_curve: list[float]
+    # Fall below the previous peak (%, positive) of the strategy at the same points.
+    drawdown_curve: list[float] = Field(default_factory=list)
+    # Orders as a fraction (0-1) of the run, at most `MAX_MARKS` of them.
+    marks: list[OrderMark] = Field(default_factory=list)
+
+
+class PricePoint(CamelModel):
+    time: datetime
+    close: float
+
+
+class WindowItem(CamelModel):
+    """Inclusive days of one window; `summary` is None (and `error` set) when it had no candles."""
+
+    start: date
+    end: date
+    summary: RunSummary | None = None
+    error: Literal["no-candles"] | None = None
+
+
+class WindowsResult(CamelModel):
+    kind: Literal["windows"]
+    length_days: int
+    step_days: int
+    items: list[WindowItem]
+    # The asset's close over the whole range, to draw the windows against.
+    prices: list[PricePoint]
+
+
+class SensitivityAxis(CamelModel):
+    id: str
+    kind: str
+    field: str
+    rule_index: int
+    condition_index: int
+    base: float
+    # One value per level (-20 %, -10 %, 0, +10 %, +20 %), integers rounded.
+    values: list[float]
+    levels: list[float]
+
+
+class SensitivityCell(CamelModel):
+    # Position on each axis (index into `values`); the last axis varies fastest in the list.
+    coords: list[int]
+    values: list[float]
+    summary: RunSummary | None = None
+    # "invalid": the variant breaks the condition's rules; "conflict": its rules contradict.
+    error: Literal["invalid", "conflict", "no-candles"] | None = None
+
+
+class SensitivityResult(CamelModel):
+    kind: Literal["sensitivity"]
+    axes: list[SensitivityAxis]
+    cells: list[SensitivityCell]
+
+
+class TimeframeItem(CamelModel):
+    timeframe: Timeframe
+    summary: RunSummary | None = None
+    error: Literal["no-candles"] | None = None
+    # First candle simulated; later than the requested start when the history begins later.
+    starts_at: datetime | None = None
+
+
+class TimeframesResult(CamelModel):
+    kind: Literal["timeframes"]
+    items: list[TimeframeItem]
+
+
+class McBands(CamelModel):
+    """Percentiles, point by point, of the equity (normalized to 100) of the paths."""
+
+    p5: list[float]
+    p25: list[float]
+    p50: list[float]
+    p75: list[float]
+    p95: list[float]
+
+
+class McCheckpoint(CamelModel):
+    """The bands once the first `runs` paths are in (the animation settles through these)."""
+
+    runs: int
+    bands: McBands
+
+
+class McReal(CamelModel):
+    """The strategy on the real candles, to place it among the synthetic paths."""
+
+    return_pct: float
+    benchmark_return_pct: float
+    max_drawdown_pct: float
+    curve: list[float]
+
+
+class McPathsResult(CamelModel):
+    kind: Literal["mc-paths"]
+    runs: int
+    block_length: int
+    seed: int
+    candle_count: int
+    real: McReal
+    # A few whole paths (evenly spaced in the order they were drawn), same points as the bands.
+    samples: list[list[float]]
+    bands: McBands
+    checkpoints: list[McCheckpoint]
+    # Final return and deepest drawdown (%) of every path, in the order they were drawn.
+    returns: list[float]
+    drawdowns: list[float]
+    # Share (%) of the paths that beat buying and holding on their own candles.
+    beat_hold_pct: float
+
+
+BatchResult = Annotated[
+    AssetsBatchResult | WindowsResult | SensitivityResult | TimeframesResult | McPathsResult,
+    Field(discriminator="kind"),
+]

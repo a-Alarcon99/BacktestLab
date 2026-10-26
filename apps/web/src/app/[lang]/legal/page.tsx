@@ -33,28 +33,6 @@ export default async function LegalNoticePage() {
       draftNotice={draftNotice(t)}
       sections={[
         {
-          heading: t("Titular del sitio", "Site owner"),
-          body: (
-            <ul>
-              <li>
-                <strong>{t("Titular", "Owner")}:</strong> {operator.name}
-              </li>
-              <li>
-                <strong>NIF/CIF:</strong> {operator.taxId}
-              </li>
-              <li>
-                <strong>{t("Domicilio", "Address")}:</strong> {operator.address}
-              </li>
-              <li>
-                <strong>{t("Correo de contacto", "Contact email")}:</strong> {operator.email}
-              </li>
-              <li>
-                <strong>{t("Sitio web", "Website")}:</strong> {siteConfig.url}
-              </li>
-            </ul>
-          ),
-        },
-        {
           heading: t("Objeto", "Purpose"),
           body: (
             <p>

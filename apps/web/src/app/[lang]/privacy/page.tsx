@@ -42,15 +42,6 @@ export default async function PrivacyPage() {
       draftNotice={draftNotice(t)}
       sections={[
         {
-          heading: t("Responsable del tratamiento", "Data controller"),
-          body: (
-            <p>
-              {operator.name} · {operator.taxId} · {operator.address} · {t("Contacto", "Contact")}: {operator.email}.{" "}
-              {t("Más datos en el", "More details in the")} <Link href={href("/legal")}>{t("aviso legal", "legal notice")}</Link>.
-            </p>
-          ),
-        },
-        {
           heading: t("Qué datos tratamos y para qué", "What data we process and why"),
           body: (
             <ul>
@@ -174,17 +165,6 @@ export default async function PrivacyPage() {
               {t(
                 "El servicio no está dirigido a menores de 18 años. Si detectamos la cuenta de un menor, la eliminaremos.",
                 "The service is not aimed at people under 18. If we detect a minor's account we will delete it."
-              )}
-            </p>
-          ),
-        },
-        {
-          heading: t("Cambios", "Changes"),
-          body: (
-            <p>
-              {t(
-                "Si la política cambia de forma relevante (por ejemplo, al añadir pagos), actualizaremos esta página y la fecha de arriba.",
-                "If the policy changes materially (for example when payments are added), we will update this page and the date above."
               )}
             </p>
           ),

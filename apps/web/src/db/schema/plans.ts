@@ -33,6 +33,16 @@ export const plans = pgTable("plans", {
   /** Runs kept in the history. */
   historySize: integer("history_size").notNull(),
   /**
+   * Assets one multi-asset run may include. Each asset consumes one backtest unit, so this only
+   * bounds a single request; the quotas above still apply. 1 = no multi-asset runs.
+   */
+  maxBatchItems: integer("max_batch_items").default(1).notNull(),
+  /**
+   * Synthetic price paths one Monte Carlo run may simulate (the paths are the cost, not the
+   * quota: a run always counts as a fixed number of backtests). 0 = no Monte Carlo runs.
+   */
+  maxMcPaths: integer("max_mc_paths").default(0).notNull(),
+  /**
    * Anonymous plans only: the IP bucket may consume `limit * ipShareMultiplier`, so clearing
    * cookies does not reset the quota while shared networks (NAT) still have headroom.
    * NULL = no IP bucket.

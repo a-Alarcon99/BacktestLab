@@ -6,7 +6,10 @@
 
 Only these three "base" timeframes are stored; the rest is resampled (see `services/candles.py`).
 Closed months/years never change, so their files are cached on disk forever; the file of the
-month/year in progress is downloaded again once the cached copy is older than a few minutes.
+month/year in progress is downloaded again once the cached copy is older than a few minutes. If
+the store cannot be reached, a cached copy of any age is served instead; with none, reads fail
+fast with `CandleStoreError` (and stay failed for `STORE_RETRY_SECONDS`, so a batch does not wait
+for the timeouts once per asset).
 """
 
 import io
@@ -22,6 +25,7 @@ from typing import Literal, Protocol
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import get_settings
 
@@ -59,6 +63,14 @@ class LocalStore:
         path.write_bytes(data)
 
 
+class CandleStoreError(Exception):
+    """The candle store could not be reached (network, TLS, credentials) and nothing is cached."""
+
+
+STORE_RETRY_SECONDS = 30
+_down_until = 0.0
+
+
 class R2Store:
     """Cloudflare R2 through its S3-compatible API."""
 
@@ -69,10 +81,16 @@ class R2Store:
         self.bucket = bucket
 
     def get(self, key: str) -> bytes | None:
+        global _down_until
+        if time.monotonic() < _down_until:
+            raise CandleStoreError("Candle storage is unreachable (recent failure)")
         try:
             return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
         except self.client.exceptions.NoSuchKey:
             return None
+        except (BotoCoreError, ClientError) as exc:
+            _down_until = time.monotonic() + STORE_RETRY_SECONDS
+            raise CandleStoreError(f"Candle storage is unreachable: {exc}") from exc
 
     def put(self, key: str, data: bytes) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=data)
@@ -91,7 +109,11 @@ def get_store() -> Store:
             aws_access_key_id=s.r2_access_key_id,
             aws_secret_access_key=s.r2_secret_access_key,
             region_name="auto",
-            config=Config(retries={"max_attempts": 3, "mode": "standard"}, read_timeout=20),
+            config=Config(
+                retries={"max_attempts": 2, "mode": "standard"},
+                connect_timeout=5,
+                read_timeout=20,
+            ),
         )
         return R2Store(client, s.r2_bucket)
     if s.candle_local_dir:
@@ -198,7 +220,15 @@ def read_file(store: Store, ref: FileRef) -> bytes | None:
                 return path.read_bytes()
     except OSError:
         logger.warning("Unreadable candle cache entry %s", path, exc_info=True)
-    data = store.get(ref.key)
+    try:
+        data = store.get(ref.key)
+    except CandleStoreError:
+        try:
+            stale = path.read_bytes()  # old, but only misses the newest candles
+        except OSError:
+            raise CandleStoreError("Candle storage is unreachable and nothing is cached") from None
+        logger.warning("Candle storage unreachable, serving the cached copy of %s", ref.key)
+        return stale
     if data is None:
         return None
     try:

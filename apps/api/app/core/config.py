@@ -72,6 +72,17 @@ class Settings(BaseSettings):
     max_body_bytes: int = 64 * 1024
     # Candles a single backtest may simulate (range / timeframe), warm-up excluded.
     max_backtest_candles: int = 100_000
+    # Multi-asset batches (`POST /backtests/batch`): one at a time, at most this many assets, and
+    # `candles per simulation x simulations` may not exceed the work budget (422 beyond it).
+    max_concurrent_batches: int = 1
+    max_batch_items: int = 100
+    max_batch_work: int = 600_000
+    # Monte Carlo over synthetic paths: its own gate, at most this many paths per request, and
+    # `candles x paths` may not exceed its work budget (422 beyond it). Measure on the deployed
+    # instance before raising them.
+    max_concurrent_mc: int = 1
+    max_mc_paths: int = 1000
+    max_mc_work: int = 1_000_000
     db_pool_max_size: int = 8
     db_pool_timeout_seconds: float = 10
     db_statement_timeout_ms: int = 20_000

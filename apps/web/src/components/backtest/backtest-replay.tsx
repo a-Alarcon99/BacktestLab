@@ -32,8 +32,11 @@ import { DrawdownChart, EquityChart } from "./replay/series-charts"
 import { SPEEDS, useSince, usePlayback, type Speed } from "./replay/use-playback"
 
 export type ReplayRun = BacktestRequest & {
-  /** "new": just executed (saved to the history); "review": re-run from the history. */
-  mode: "new" | "review"
+  /**
+   * "new": just executed (saved to the history); "review": re-run from the history; "batch": one
+   * asset of a multi-asset run, opened with its result already in memory (nothing is run or saved).
+   */
+  mode: "new" | "review" | "batch"
   /** History record being reviewed (so "previous run" never compares a run with itself). */
   recordId?: string
 }
@@ -89,13 +92,14 @@ function BacktestReplayDialog({
  * Runs `run` on the API and animates the result. `run` must be referentially stable (kept in
  * state or memoized): a new object starts a new run.
  */
-function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void }) {
-  const [state, setState] = useState<RunState>({ status: "loading" })
+function ReplayPlayer({ run, onClose, preloaded }: { run: ReplayRun; onClose: () => void; preloaded?: BacktestResult }) {
+  const [state, setState] = useState<RunState>(preloaded ? { status: "ready", result: preloaded } : { status: "loading" })
   const [attempt, setAttempt] = useState(0)
   const [expanded, setExpanded] = useState(true)
   const { locale, t, f } = useReplayText()
 
   useEffect(() => {
+    if (preloaded) return
     const controller = new AbortController()
     const { mode, recordId, ...request } = run
     runBacktest(request, controller.signal).then(
@@ -112,7 +116,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
       }
     )
     return () => controller.abort()
-  }, [run, attempt, locale])
+  }, [run, attempt, locale, preloaded])
 
   if (state.status === "ready") {
     return <ReplayView run={run} result={state.result} recordId={state.recordId} onClose={onClose} expanded={expanded} onExpandedChange={setExpanded} />
@@ -178,7 +182,7 @@ function ReplayPlayer({ run, onClose }: { run: ReplayRun; onClose: () => void })
 }
 
 /** Candles rising in a loop while the engine works (CSS only, still with reduced motion). */
-function LoadingArt() {
+export function LoadingArt() {
   const bars = [0.45, 0.7, 0.55, 0.85, 0.6, 1, 0.75]
   return (
     <svg viewBox="0 0 84 48" className="h-12 w-20" aria-hidden>
@@ -203,7 +207,7 @@ function LoadingArt() {
  * Switches the dialog between the whole window (its default size) and a wide dialog with margins
  * (inline styles on the popup, undone when it goes back to full or closes).
  */
-function ExpandButton({ expanded, onChange }: { expanded: boolean; onChange: (expanded: boolean) => void }) {
+export function ExpandButton({ expanded, onChange }: { expanded: boolean; onChange: (expanded: boolean) => void }) {
   const { t } = useI18n()
   const ref = useRef<HTMLButtonElement>(null)
   useEffect(() => {
@@ -248,7 +252,11 @@ function ReplayHeader({
         </DialogTitle>
         <DialogDescription className="num text-caption text-muted-foreground">
           {run.timeframe} · {formatDate(run.from, locale)} → {formatDate(run.to, locale)} · {candles} ·{" "}
-          {run.mode === "new" ? t("Backtest ejecutado ahora", "Backtest run just now") : t("Revisión de backtest", "Backtest review")}
+          {run.mode === "new"
+            ? t("Backtest ejecutado ahora", "Backtest run just now")
+            : run.mode === "batch"
+              ? t("Del grupo de varios activos", "From the multi-asset group")
+              : t("Revisión de backtest", "Backtest review")}
         </DialogDescription>
       </div>
       {children}
@@ -280,9 +288,11 @@ function ReplayView({
   const { locale, t, f } = useReplayText()
   const reduced = useReducedMotion()
   const steps = result.candles.length
-  const playback = usePlayback(steps, reduced)
+  // A report opened from a multi-asset run starts finished: that run already played its animation.
+  const still = reduced || run.mode === "batch"
+  const playback = usePlayback(steps, still)
   const { finished } = playback
-  const since = useSince(finished, SETTLE.end, reduced)
+  const since = useSince(finished, SETTLE.end, still)
   const capital = run.strategy.initialCapital
   const intraday = isIntraday(run.timeframe)
   const track = useMemo(() => liveTrack(result), [result])

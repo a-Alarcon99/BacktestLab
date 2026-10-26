@@ -4,12 +4,12 @@ import Link from "next/link"
 import { HistoryIcon } from "lucide-react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { buttonVariants } from "@/components/ui/button"
-import { useRecentBacktests } from "@/lib/storage/backtests"
+import { useHistory } from "@/lib/storage/backtests"
 import { BacktestList } from "./backtest-list"
 
 /** The user's last runs, read from this browser. */
 function RecentBacktests() {
-  const { data: backtests } = useRecentBacktests()
+  const { data: backtests } = useHistory()
   const { t, href } = useI18n()
 
   if (!backtests) return <div aria-hidden className="h-96 animate-pulse rounded-xl bg-muted/40" />

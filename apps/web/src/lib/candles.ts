@@ -38,6 +38,9 @@ export function estimateCandles(from: string, to: string, timeframe: Timeframe) 
 /** Candles a single backtest may simulate (the API's `MAX_BACKTEST_CANDLES`), warm-up excluded. */
 export const maxBacktestCandles = 100_000
 
+/** Work budget of a multi-asset run: candles per asset x assets (the API's `MAX_BATCH_WORK`). */
+export const maxBatchWork = 600_000
+
 /** Timeframes shorter than a day: dates need the hour. */
 export function isIntraday(timeframe: Timeframe) {
   return timeframeMs[timeframe] < DAY_MS

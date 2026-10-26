@@ -152,6 +152,7 @@ export function TradeResultsChart({
 
 export function DistributionChart({ result }: { result: BacktestResult }) {
   const { t, f } = useReplayText()
+  const [hover, setHover] = useState<number | null>(null)
   const closed = result.roundTrips.filter((trip) => !trip.open).map((trip) => trip.pnlPct)
   const { edges, counts } = resultBins(closed)
   return (
@@ -175,14 +176,18 @@ export function DistributionChart({ result }: { result: BacktestResult }) {
         const left = PAD.l + (width - PAD.l - 12 - plotW) / 2
         const y = (v: number) => PAD.t + (1 - v / (max * 1.12)) * (H - PAD.t - PAD.b)
         const every = Math.ceil(edges.length / Math.max(2, Math.floor(plotW / 48)))
+        const digits = Math.abs(edges[1] - edges[0]) < 1 ? 2 : 1
+        const upper = (k: number) => edges[k + 1] ?? edges[k] + (edges[1] - edges[0])
         return (
+          <div className="relative" onPointerLeave={() => setHover(null)}>
           <svg width={width} height={H} role="img" aria-label={t("Histograma de resultados de las operaciones", "Histogram of trade results")} className="block">
             <line x1={left} x2={left + plotW} y1={y(0)} y2={y(0)} stroke="var(--border-strong)" />
             {counts.map((count, k) => {
               const up = edges[k] >= 0
               const x = left + k * bw
               return (
-                <g key={k}>
+                <g key={k} onPointerEnter={() => setHover(k)} opacity={hover === null || hover === k ? 1 : 0.5}>
+                  {hover === k && <rect x={x} y={PAD.t - 6} width={bw} height={y(0) - PAD.t + 6} rx={4} fill="var(--primary)" opacity={0.08} />}
                   {count > 0 && (
                     <>
                       <rect
@@ -201,6 +206,7 @@ export function DistributionChart({ result }: { result: BacktestResult }) {
                       </text>
                     </>
                   )}
+                  <rect x={x} y={0} width={bw} height={H} fill="transparent" />
                 </g>
               )
             })}
@@ -212,6 +218,16 @@ export function DistributionChart({ result }: { result: BacktestResult }) {
               ) : null
             )}
           </svg>
+          {hover !== null && (
+            <Tip x={left + (hover + 0.5) * bw} width={width}>
+              <p className="num font-semibold">
+                {f.signedPct(edges[hover], digits)} → {f.signedPct(upper(hover), digits)}
+              </p>
+              <p className="num font-bold">{t(f.plural(counts[hover], "operación", "operaciones"), `${f.count.format(counts[hover])} ${counts[hover] === 1 ? "trade" : "trades"}`)}</p>
+              <p className="num text-muted-foreground">{t(`${f.pct((counts[hover] / closed.length) * 100, 0)} del total`, `${f.pct((counts[hover] / closed.length) * 100, 0)} of the total`)}</p>
+            </Tip>
+          )}
+          </div>
         )
       }}
     </ChartCard>
@@ -347,6 +363,7 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number) {
 
 export function WinLossChart({ result }: { result: BacktestResult }) {
   const { t, f } = useReplayText()
+  const [segment, setSegment] = useState<"win" | "loss" | null>(null)
   const m = result.metrics
   const share = m.roundTrips ? m.wins / m.roundTrips : 0
   const breakEven = m.payoffRatio !== null ? 100 / (1 + m.payoffRatio) : null
@@ -372,10 +389,10 @@ export function WinLossChart({ result }: { result: BacktestResult }) {
         const wide = width >= 420
         return (
           <div className={cn("flex gap-5", wide ? "flex-row items-center" : "flex-col items-center")}>
-            <svg width={donut} height={donut} viewBox="0 0 132 132" className="shrink-0" role="img" aria-label={t(`${m.wins} ganadas y ${m.losses} perdidas`, `${m.wins} won and ${m.losses} lost`)}>
+            <svg width={donut} height={donut} viewBox="0 0 132 132" className="shrink-0" role="img" aria-label={t(`${m.wins} ganadas y ${m.losses} perdidas`, `${m.wins} won and ${m.losses} lost`)} onPointerLeave={() => setSegment(null)}>
               <circle cx={66} cy={66} r={52} fill="none" stroke="var(--muted)" strokeWidth={16} />
               {share > 0 && (
-                <path className="bt-draw" d={arc(66, 66, 52, 0, share)} pathLength={1} strokeDasharray={1} fill="none" stroke="var(--up)" strokeWidth={16} />
+                <path className="bt-draw cursor-default" d={arc(66, 66, 52, 0, share)} pathLength={1} strokeDasharray={1} fill="none" stroke="var(--up)" strokeWidth={segment === "win" ? 20 : 16} opacity={segment === "loss" ? 0.45 : 1} onPointerEnter={() => setSegment("win")} />
               )}
               {share < 1 && (
                 <path
@@ -386,14 +403,16 @@ export function WinLossChart({ result }: { result: BacktestResult }) {
                   strokeDasharray={1}
                   fill="none"
                   stroke="var(--down)"
-                  strokeWidth={16}
+                  strokeWidth={segment === "loss" ? 20 : 16}
+                  opacity={segment === "win" ? 0.45 : 1}
+                  onPointerEnter={() => setSegment("loss")}
                 />
               )}
-              <text x={66} y={66} textAnchor="middle" className="num fill-foreground text-[22px] font-bold">
-                {f.pct(m.winRatePct, 0)}
+              <text x={66} y={66} textAnchor="middle" className={cn("num text-[22px] font-bold", segment === "win" ? "fill-up" : segment === "loss" ? "fill-down" : "fill-foreground")}>
+                {segment === "win" ? f.count.format(m.wins) : segment === "loss" ? f.count.format(m.losses) : f.pct(m.winRatePct, 0)}
               </text>
               <text x={66} y={84} textAnchor="middle" className="fill-muted-foreground text-[10px] font-semibold">
-                {t("de acierto", "win rate")}
+                {segment === "win" ? t("ganadas", "won") : segment === "loss" ? t("perdidas", "lost") : t("de acierto", "win rate")}
               </text>
             </svg>
             <div className="flex w-full min-w-0 flex-col gap-3">

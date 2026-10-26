@@ -71,6 +71,34 @@
       "when": 1792494236407,
       "tag": "0009_tearful_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792951209631,
+      "tag": "0010_plans_batch_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792951213758,
+      "tag": "0011_raise_starter_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792954119742,
+      "tag": "0012_admin_plan_robustness",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792973382278,
+      "tag": "0013_plans_monte_carlo",
+      "breakpoints": true
     }
   ]
 }

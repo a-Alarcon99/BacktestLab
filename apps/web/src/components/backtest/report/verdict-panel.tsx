@@ -12,7 +12,7 @@ import { Reveal, toneBg, toneSoft, toneText } from "./parts"
 const delay = (s: number) => ({ "--bt-delay": `${s}s` }) as CSSProperties
 
 /** Circular seal drawn around the verdict's icon: ✓ good, ! mixed, ✕ bad. */
-function Seal({ tone, className }: { tone: Tone; className?: string }) {
+export function Seal({ tone, className }: { tone: Tone; className?: string }) {
   const stroke = tone === "good" ? "var(--up)" : tone === "bad" ? "var(--down)" : "var(--chart-3)"
   return (
     <svg viewBox="0 0 64 64" className={cn("shrink-0", className ?? "size-16 sm:size-20")} aria-hidden>

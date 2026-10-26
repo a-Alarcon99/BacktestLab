@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ADD COLUMN "max_batch_items" integer DEFAULT 1 NOT NULL;

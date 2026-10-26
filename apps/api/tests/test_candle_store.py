@@ -152,6 +152,34 @@ def test_cache_serves_closed_files_without_asking_the_store(tmp_path, monkeypatc
     assert candle_store.read_file(s, FileRef("candles/none.parquet", ref.start, ref.end)) is None
 
 
+def test_unreachable_store_serves_a_stale_copy_or_fails_fast(tmp_path, monkeypatch):
+    settings = candle_store.get_settings()
+    monkeypatch.setattr(settings, "candle_cache_dir", str(tmp_path / "cache"))
+    monkeypatch.setattr(settings, "candle_open_file_ttl_seconds", 0)
+
+    class Down(LocalStore):
+        cacheable = True
+        down = False
+        reads = 0
+
+        def get(self, key):
+            self.reads += 1
+            if self.down:
+                raise candle_store.CandleStoreError("down")
+            return super().get(key)
+
+    s = Down(tmp_path / "bucket")
+    ingest.write_candles(s, "BTCUSDT", minutely(dt(2024, 1, 1), 1440))
+    ref = file_ref("BTCUSDT", "1h", 2024)
+    open_file = FileRef(ref.key, ref.start, datetime.now(UTC) + timedelta(days=1))
+    fresh = candle_store.read_file(s, open_file)
+    s.down = True
+    assert candle_store.read_file(s, open_file) == fresh  # expired copy beats an error
+    other = FileRef("candles/BTCUSDT/1h/2023.parquet", ref.start, ref.end)
+    with pytest.raises(candle_store.CandleStoreError):
+        candle_store.read_file(s, other)
+
+
 def test_cache_is_pruned_to_its_limit(tmp_path):
     for i in range(4):
         path = tmp_path / f"{i}.parquet"
