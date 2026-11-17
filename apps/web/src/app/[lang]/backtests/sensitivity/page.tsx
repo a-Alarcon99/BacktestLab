@@ -16,8 +16,8 @@ export default async function Page() {
     <BacktestSubpage
       title={t("Sensibilidad de parámetros", "Parameter sensitivity")}
       text={t(
-        "Varía uno o dos parámetros ±20 %: una meseta indica robustez, un pico aislado indica sobreajuste.",
-        "Varies one or two parameters by ±20 %: a plateau means robustness, an isolated peak means overfitting."
+        "Varía uno o dos parámetros (±20 % por defecto, con valores editables): una meseta indica robustez, un pico aislado indica sobreajuste.",
+        "Varies one or two parameters (±20 % by default, with editable values): a plateau means robustness, an isolated peak means overfitting."
       )}
     >
       <RobustPanel test="sensitivity" assets={catalog} today={today} />

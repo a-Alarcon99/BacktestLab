@@ -5,6 +5,7 @@
 
 import {
   chosenTimeframes,
+  LEVELS,
   MAX_AXES,
   MAX_EXTRA_TIMEFRAMES,
   MC_MAX_PATHS,
@@ -60,6 +61,9 @@ export function parseBatchBody(body: unknown): BatchInput | null {
     const { params } = record;
     if (!Array.isArray(params) || params.length < 1 || params.length > MAX_AXES) return null;
     if (!params.every((p) => typeof p === "string" && PARAM.test(p)) || new Set(params).size !== params.length) return null;
+    const { values } = record;
+    const isValues = (row: unknown) => Array.isArray(row) && row.length === LEVELS.length && row.every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1_000_000);
+    if (values !== undefined && (!Array.isArray(values) || values.length !== params.length || !values.every(isValues))) return null;
     units = sensitivityCells(params.length);
   } else {
     const { timeframes } = record;

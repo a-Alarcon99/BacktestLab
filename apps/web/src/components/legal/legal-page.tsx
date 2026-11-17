@@ -16,7 +16,7 @@ export function LegalPage({
   title: string
   intro: string
   sections: LegalSection[]
-  draftNotice: string
+  draftNotice?: string
 }) {
   const updated = new Intl.DateTimeFormat(intlLocale[locale], { dateStyle: "long", timeZone: "UTC" }).format(
     new Date(`${siteConfig.legalUpdated}T00:00:00Z`)
@@ -29,9 +29,11 @@ export function LegalPage({
           {locale === "es" ? "Última actualización" : "Last updated"}: {updated}
         </p>
         <p className="text-muted-foreground">{intro}</p>
-        <p role="note" className="rounded-lg bg-muted px-3 py-2.5 text-caption text-muted-foreground">
-          {draftNotice}
-        </p>
+        {draftNotice && (
+          <p role="note" className="rounded-lg bg-muted px-3 py-2.5 text-caption text-muted-foreground">
+            {draftNotice}
+          </p>
+        )}
       </header>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
         {sections.map((section, i) => (

@@ -64,6 +64,9 @@ test("sensitivity costs five simulations per varied parameter", () => {
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value"] })?.units, 5);
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value", "1:0:value"] })?.units, 25);
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: [] }), null);
+  assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value"], values: [[10, 20, 35, 40, 50]] })?.units, 5);
+  assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value"], values: [[10, 20, 35, 40, 50], [1, 2, 3, 4, 5]] }), null);
+  assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value"], values: [[10, 20, 35]] }), null);
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["a", "b", "c"] }), null);
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["0:0:value", "0:0:value"] }), null);
   assert.equal(parseBatchBody({ ...one, kind: "sensitivity", params: ["../etc"] }), null);

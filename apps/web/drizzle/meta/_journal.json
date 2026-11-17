@@ -99,6 +99,13 @@
       "when": 1792973382278,
       "tag": "0013_plans_monte_carlo",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793189453524,
+      "tag": "0014_remove_admin_plan",
+      "breakpoints": true
     }
   ]
 }

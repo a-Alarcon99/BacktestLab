@@ -207,11 +207,17 @@ class SensitivityBatchRequest(_BatchBase):
     symbol: Symbol
     # Ids from `robustness.tunables` ("<rule>:<condition>:<field>", indices in the rules).
     params: list[Annotated[str, Field(max_length=64)]] = Field(min_length=1, max_length=2)
+    # The five values to try of each parameter, same order as `params` (default ±10 % steps).
+    values: list[list[Annotated[float, Field(ge=0, le=1_000_000)]]] | None = None
 
     @model_validator(mode="after")
     def _distinct_params(self) -> Self:
         if len(set(self.params)) != len(self.params):
             raise ValueError("Parameters must be distinct")
+        if self.values is not None and (
+            len(self.values) != len(self.params) or any(len(v) != 5 for v in self.values)
+        ):
+            raise ValueError("Five values per parameter")
         return self
 
 
@@ -497,7 +503,7 @@ class SensitivityAxis(CamelModel):
     rule_index: int
     condition_index: int
     base: float
-    # One value per level (-20 %, -10 %, 0, +10 %, +20 %), integers rounded.
+    # One value per level (by default -20 %, -10 %, 0, +10 %, +20 %), integers rounded.
     values: list[float]
     levels: list[float]
 

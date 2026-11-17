@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { draftNotice } from "@/components/legal/draft-notice"
 import { LegalPage } from "@/components/legal/legal-page"
 import { siteConfig } from "@/config/site"
 import { getI18n } from "@/lib/i18n-server"
@@ -30,7 +29,6 @@ export default async function LegalNoticePage() {
         "Información general exigida por el artículo 10 de la Ley 34/2002 de servicios de la sociedad de la información y de comercio electrónico (LSSI).",
         "General information required by article 10 of Spanish Law 34/2002 on information society services and electronic commerce (LSSI)."
       )}
-      draftNotice={draftNotice(t)}
       sections={[
         {
           heading: t("Objeto", "Purpose"),
@@ -50,17 +48,6 @@ export default async function LegalNoticePage() {
               <Link href={href("/terms")}>{t("Términos y condiciones", "Terms and conditions")}</Link> ·{" "}
               <Link href={href("/privacy")}>{t("Política de privacidad", "Privacy policy")}</Link> ·{" "}
               <Link href={href("/cookies")}>{t("Política de cookies", "Cookie policy")}</Link>
-            </p>
-          ),
-        },
-        {
-          heading: t("Propiedad intelectual e industrial", "Intellectual and industrial property"),
-          body: (
-            <p>
-              {t(
-                "Los contenidos, el diseño, el código y la marca BacktestLab están protegidos por la normativa de propiedad intelectual e industrial. Queda prohibida su reproducción o uso comercial sin autorización. Los nombres y logotipos de criptoactivos pertenecen a sus respectivos titulares.",
-                "The content, design, code and the BacktestLab brand are protected by intellectual and industrial property law. Reproduction or commercial use without authorisation is forbidden. Crypto-asset names and logos belong to their respective owners."
-              )}
             </p>
           ),
         },

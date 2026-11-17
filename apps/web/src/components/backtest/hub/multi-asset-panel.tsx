@@ -2,19 +2,18 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { LayersIcon, LockIcon, PlayIcon, SearchIcon, XIcon } from "lucide-react"
-import { cn } from "cn"
+import { LayersIcon, LockIcon, PlayIcon, XIcon } from "lucide-react"
 import { useI18n } from "@/components/i18n/locale-provider"
-import { AssetAvatar } from "@/components/market/asset-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Field, Input } from "@/components/ui/input"
+import { Field } from "@/components/ui/input"
 import { maxBacktestCandles, maxBatchWork } from "@/lib/candles"
 import { formatDate, numberFormat } from "@/lib/format"
 import type { AssetInfo } from "@/lib/market"
 import { remainingBacktests, useMe } from "@/lib/session"
+import { AssetPicker } from "./asset-picker"
 import { BacktestSetupFields, NotRunnable, useBacktestSetup } from "../backtest-setup"
 import { REPLAY_DIALOG_CLASS } from "../backtest-replay"
 import { MultiReplayPlayer, type MultiRun } from "../multi/multi-replay"
@@ -32,7 +31,6 @@ function MultiAssetPanel({ assets, today }: { assets: AssetInfo[]; today: string
   // as far as the oldest one.
   const earliest = useMemo(() => assets.reduce((min, a) => (a.historySince < min ? a.historySince : min), today), [assets, today])
   const [selected, setSelected] = useState<string[]>([])
-  const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const n = selected.length
   const perRun = Math.min(maxBacktestCandles, Math.floor(maxBatchWork / Math.max(2, n)))
@@ -49,11 +47,6 @@ function MultiAssetPanel({ assets, today }: { assets: AssetInfo[]; today: string
     () => (canRun && strategy ? { kind: "assets", symbols: selected, strategy, timeframe, from, to, mode: "new" } : null),
     [canRun, selected, strategy, timeframe, from, to]
   )
-
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? assets.filter((a) => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)) : assets
-  }, [assets, query])
 
   const toggle = (symbol: string) =>
     setSelected((current) => (current.includes(symbol) ? current.filter((s) => s !== symbol) : current.length < maxItems ? [...current, symbol] : current))
@@ -102,44 +95,7 @@ function MultiAssetPanel({ assets, today }: { assets: AssetInfo[]; today: string
             `Pick 2 to ${maxItems} assets depending on your plan. The same strategy runs on each with its full capital (it isn't a portfolio sharing the capital).`
           )}
         >
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("Buscar activo…", "Search assets…")}
-              aria-label={t("Buscar activo", "Search assets")}
-              className="pl-9"
-            />
-          </div>
-          <div className="grid max-h-60 gap-2 overflow-y-auto rounded-lg border p-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {shown.map((asset) => {
-              const on = selected.includes(asset.symbol)
-              const full = !on && n >= maxItems
-              return (
-                <button
-                  key={asset.symbol}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={full}
-                  onClick={() => toggle(asset.symbol)}
-                  title={full ? t("Has llegado al máximo de tu plan", "You've reached your plan's maximum") : undefined}
-                  className={cn(
-                    "flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-40",
-                    on ? "border-primary bg-accent text-accent-foreground" : "hover:bg-muted/60"
-                  )}
-                >
-                  <AssetAvatar symbol={asset.symbol} size={24} />
-                  <span className="flex min-w-0 flex-col leading-tight">
-                    <span className="text-caption font-semibold">{asset.symbol}</span>
-                    <span className="truncate text-[11px] text-muted-foreground">{asset.name}</span>
-                  </span>
-                </button>
-              )
-            })}
-            {shown.length === 0 && <p className="col-span-full p-2 text-caption text-muted-foreground">{t("Ningún activo coincide.", "No asset matches.")}</p>}
-          </div>
+          <AssetPicker assets={assets} selected={selected} onPick={toggle} full={n >= maxItems} />
           {n > 0 && (
             <p className="flex flex-wrap items-center gap-1.5 text-caption">
               {selected.map((symbol) => (

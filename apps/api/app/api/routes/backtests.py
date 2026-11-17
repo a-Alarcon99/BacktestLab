@@ -292,7 +292,8 @@ def _prepare_sensitivity(req: SensitivityBatchRequest, conn: Connection, setting
     asset = _get_asset(conn, req.symbol)
 
     def job() -> SensitivityResult:
-        axes = [axis_of(p) for p in chosen]
+        typed = req.values or [None] * len(chosen)
+        axes = [axis_of(p, v) for p, v in zip(chosen, typed, strict=True)]
         grid = list(product(range(len(LEVELS)), repeat=len(chosen)))
         values = [[a.values[k] for a, k in zip(axes, coords, strict=True)] for coords in grid]
         strategies: list[StrategyConfig | None] = []

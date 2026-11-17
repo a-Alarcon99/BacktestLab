@@ -33,6 +33,7 @@ from app.strategies.engine import Simulation, simulate, warmup_candles
 
 # Relative steps of a parameter around its value: ±20 % in 10 % steps (5 levels per axis).
 LEVELS: tuple[float, ...] = (-0.2, -0.1, 0.0, 0.1, 0.2)
+# The user may type each of the values of a parameter instead of using those levels.
 # Parameters varied at once (a grid of LEVELS ** axes cells: at most 25 simulations).
 MAX_AXES = 2
 # Points of the curves sent with each summary.
@@ -106,17 +107,22 @@ def tunables(strategy: StrategyConfig) -> list[Param]:
     return found
 
 
+def fit_value(param: Param, value: float) -> float:
+    """A value kept inside what the parameter accepts, rounded."""
+    value = min(max(value, param.lo), param.hi)
+    # Halves round up (not to even) to match the web app's preview of these values.
+    return float(floor(value + 0.5)) if param.integer else round(value, 2)
+
+
 def level_values(param: Param) -> list[float]:
     """The value of the parameter at each level, rounded and kept inside what it accepts."""
-    values = []
-    for level in LEVELS:
-        value = min(max(param.base * (1 + level), param.lo), param.hi)
-        # Halves round up (not to even) to match the web app's preview of these values.
-        values.append(float(floor(value + 0.5)) if param.integer else round(value, 2))
-    return values
+    return [fit_value(param, param.base * (1 + level)) for level in LEVELS]
 
 
-def axis_of(param: Param) -> SensitivityAxis:
+def axis_of(param: Param, chosen: list[float] | None = None) -> SensitivityAxis:
+    """The axis of a parameter: the usual levels, or the values the user typed."""
+    values = level_values(param) if chosen is None else [fit_value(param, v) for v in chosen]
+    levels = [v / param.base - 1 if param.base else 0.0 for v in values]
     return SensitivityAxis(
         id=param.id,
         kind=param.kind,
@@ -124,8 +130,8 @@ def axis_of(param: Param) -> SensitivityAxis:
         rule_index=param.rule_index,
         condition_index=param.condition_index,
         base=param.base,
-        values=level_values(param),
-        levels=list(LEVELS),
+        values=values,
+        levels=levels,
     )
 
 

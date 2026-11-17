@@ -26,6 +26,7 @@ import {
   neighborTimeframes,
   sensitivityCells,
   sensitivityParams,
+  valuesFromEdits,
   TIMEFRAME_ORDER,
   timeframeFits,
   windowCount,
@@ -133,6 +134,17 @@ function RobustForm({ test, asset, today }: { test: RobustTest; asset: AssetInfo
   const [picked, setPicked] = useState<string[] | null>(null)
   const chosen = useMemo(() => (picked ?? (params[0] ? [params[0].id] : [])).filter((id) => params.some((p) => p.id === id)), [picked, params])
 
+  // The four values typed for each parameter (the original stays in the middle of the five).
+  // What is typed is kept as text; what is sent is kept inside what the parameter accepts.
+  const [editsOf, setEditsOf] = useState<Record<string, string[]>>({})
+  const editsFor = (p: (typeof params)[number]) => editsOf[p.id] ?? [p.values[0], p.values[1], p.values[3], p.values[4]].map(String)
+  const toValues = (p: (typeof params)[number]) => {
+    const defaults = [p.values[0], p.values[1], p.values[3], p.values[4]]
+    return valuesFromEdits(p, editsFor(p).map((text, n) => (text.trim() !== "" && Number.isFinite(Number(text)) ? Number(text) : defaults[n])))
+  }
+  const valuesKey = JSON.stringify(chosen.map((id) => { const p = params.find((x) => x.id === id); return p ? toValues(p) : [] }))
+  const sentValues = useMemo(() => JSON.parse(valuesKey) as number[][], [valuesKey])
+
   // --- Timeframes: the one asked for plus the ones ticked (its neighbours until the user ticks).
   const [pickedFrames, setPickedFrames] = useState<Timeframe[] | null>(null)
   const extras = useMemo(() => {
@@ -182,9 +194,9 @@ function RobustForm({ test, asset, today }: { test: RobustTest; asset: AssetInfo
     if (!canRun || !strategy) return null
     const base = { symbol: asset.symbol, timeframe, from, to, strategy, mode: "new" as const }
     if (test === "windows") return { ...base, kind: "windows", lengthDays: length, stepDays: step }
-    if (test === "sensitivity") return { ...base, kind: "sensitivity", params: chosen }
+    if (test === "sensitivity") return { ...base, kind: "sensitivity", params: chosen, values: sentValues }
     return { ...base, kind: "timeframes", timeframes: extras }
-  }, [canRun, strategy, asset.symbol, timeframe, from, to, test, length, step, chosen, extras])
+  }, [canRun, strategy, asset.symbol, timeframe, from, to, test, length, step, chosen, sentValues, extras])
 
   const toggleParam = (id: string) => {
     const current = chosen
@@ -251,8 +263,8 @@ function RobustForm({ test, asset, today }: { test: RobustTest; asset: AssetInfo
             label={t("Parámetros a variar (hasta 2)", "Parameters to vary (up to 2)")}
             className="lg:col-span-2"
             hint={t(
-              "Cada parámetro se prueba en cinco valores (−20 %, −10 %, original, +10 %, +20 %); con dos se prueban todas las combinaciones (25 backtests).",
-              "Each parameter is tried at five values (−20 %, −10 %, original, +10 %, +20 %); with two, all combinations are tried (25 backtests)."
+              "Cada parámetro se prueba en cinco valores, los cuatro que elijas abajo más el original (por defecto ±10 % y ±20 %); con dos se prueban todas las combinaciones (25 backtests).",
+              "Each parameter is tried at five values, the four you set below plus the original (±10 % and ±20 % by default); with two, all combinations are tried (25 backtests)."
             )}
           >
             {strategies === undefined ? (
@@ -289,6 +301,54 @@ function RobustForm({ test, asset, today }: { test: RobustTest; asset: AssetInfo
               </ul>
             )}
           </Field>
+        )}
+
+        {test === "sensitivity" && chosen.length > 0 && (
+          <div className="grid gap-3 lg:col-span-2 sm:grid-cols-2">
+            {chosen.map((id, k) => {
+              const p = params.find((x) => x.id === id)
+              if (!p) return null
+              const name = `${kindLabel(p.kind, t)} ${fieldLabel(p.field.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`), t)}`
+              const edits = editsFor(p)
+              const input = (n: number) => (
+                <Input
+                  key={n}
+                  id={`sens-value-${k}-${n}`}
+                  name={`value-${k}-${n}`}
+                  aria-label={t(`${name}: valor ${n + 1}`, `${name}: value ${n + 1}`)}
+                  type="number"
+                  min={p.lo}
+                  max={p.hi}
+                  step={p.integer ? 1 : "any"}
+                  value={edits[n]}
+                  className="w-20"
+                  onChange={(e) => setEditsOf((current) => ({ ...current, [id]: editsFor(p).map((text, m) => (m === n ? e.target.value : text)) }))}
+                  onBlur={() => setEditsOf((current) => ({ ...current, [id]: [...toValues(p).slice(0, 2), ...toValues(p).slice(3)].map(String) }))}
+                />
+              )
+              return (
+                <Field
+                  key={id}
+                  label={t(`Valores de ${name}`, `Values of ${name}`)}
+                  htmlFor={`sens-value-${k}-0`}
+                  hint={t(
+                    `Dos valores por debajo y dos por encima del original, entre ${count.format(p.lo)} y ${count.format(p.hi)}. Se probarán: ${sentValues[k]?.map((v) => count.format(v)).join(" · ")}`,
+                    `Two values below and two above the original, between ${count.format(p.lo)} and ${count.format(p.hi)}. They will be tried: ${sentValues[k]?.map((v) => count.format(v)).join(" · ")}`
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    {input(0)}
+                    {input(1)}
+                    <span className="num flex h-9 min-w-16 items-center justify-center rounded-lg border border-primary bg-accent px-2 text-sm font-semibold" title={t("Valor original", "Original value")}>
+                      {count.format(p.base)}
+                    </span>
+                    {input(2)}
+                    {input(3)}
+                  </div>
+                </Field>
+              )
+            })}
+          </div>
         )}
 
         {test === "timeframes" && (

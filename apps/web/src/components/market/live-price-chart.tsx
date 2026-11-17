@@ -1,9 +1,17 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChartCandlestickIcon, ChartLineIcon } from "lucide-react"
+import { ChartCandlestickIcon, ChartLineIcon, ChevronDownIcon } from "lucide-react"
+import { cn } from "cn"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { fetchCandles, isIntraday, timeframes, type Candle, type Timeframe } from "@/lib/candles"
 import { chartTypes, useAssetView } from "./asset-view"
@@ -12,10 +20,15 @@ import { PriceChart } from "./price-chart"
 
 const OLDER_RETRY_COOLDOWN_MS = 3_000
 
+/** Always visible; the rest of the timeframes live in the "More" dropdown. */
+const mainTimeframes = ["5m", "1h", "4h", "1d"] as const satisfies readonly Timeframe[]
+const moreTimeframes = timeframes.filter((tf) => !(mainTimeframes as readonly string[]).includes(tf))
+
 /** Timeframe and line/candles toggle for the price chart card header. */
 function PriceChartControls() {
   const { timeframe, setTimeframe, chartType, setChartType } = useAssetView()
   const { t } = useI18n()
+  const inMore = (moreTimeframes as readonly string[]).includes(timeframe)
   const chartTypeLabels = {
     line: (
       <>
@@ -32,13 +45,37 @@ function PriceChartControls() {
   }
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <SegmentedControl
-        label={t("Temporalidad del gráfico", "Chart timeframe")}
-        options={timeframes}
-        value={timeframe}
-        onValueChange={setTimeframe}
-        size="sm"
-      />
+      <div className="flex items-center gap-1">
+        <SegmentedControl
+          label={t("Temporalidad del gráfico", "Chart timeframe")}
+          options={mainTimeframes}
+          // Outside the shortlist (picked from the dropdown): none of the buttons is active.
+          value={timeframe as (typeof mainTimeframes)[number]}
+          onValueChange={setTimeframe}
+          size="sm"
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={t("Más temporalidades", "More timeframes")}
+            className={cn(
+              "num inline-flex h-7 items-center gap-1 rounded-lg px-2 text-caption font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50",
+              inMore ? "bg-background text-foreground shadow-sm ring-1 ring-border dark:bg-card" : "bg-muted text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {inMore ? timeframe : t("Más", "More")}
+            <ChevronDownIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-24">
+            <DropdownMenuRadioGroup value={timeframe} onValueChange={(value) => setTimeframe(value as Timeframe)}>
+              {moreTimeframes.map((tf) => (
+                <DropdownMenuRadioItem key={tf} value={tf} className="num">
+                  {tf}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <SegmentedControl
         label={t("Tipo de gráfico", "Chart type")}
         options={chartTypes}

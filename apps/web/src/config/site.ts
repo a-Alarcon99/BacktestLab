@@ -16,6 +16,7 @@ export const siteConfig = {
     { label: { es: "Backtests", en: "Backtests" }, href: "/backtests" },
     { label: { es: "Estrategias", en: "Strategies" }, href: "/strategies" },
     { label: { es: "Planes", en: "Plans" }, href: "/plans" },
+    { label: { es: "Docs", en: "Docs" }, href: "/docs" },
   ],
   /** Legal pages, linked from the footer and the sign-up form. */
   legal: [
@@ -32,7 +33,7 @@ export const siteConfig = {
     name: "[Nombre o razón social del titular]",
     taxId: "[NIF/CIF]",
     address: "[Domicilio postal]",
-    email: "[correo de contacto]",
+    email: "PrestigeRoomGroup@proton.me",
   },
   /** Last review of the legal texts (ISO date). */
   legalUpdated: "2026-10-25",

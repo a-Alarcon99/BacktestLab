@@ -94,7 +94,10 @@ export function SensitivityView({
     const side = run.strategy.rules[axis.ruleIndex]?.side === "sell" ? t("Venta", "Sell") : t("Compra", "Buy")
     return `${side} · ${kindLabel(axis.kind, t)} ${fieldLabel(axis.field, t)}`
   }
-  const levelText = (l: number) => `${l > 0 ? "+" : l < 0 ? "−" : ""}${Math.round(Math.abs(l) * 100)} %`
+  // Furthest the typed values go below and above the original, in percent.
+  const below = Math.round(Math.max(0, -Math.min(...result.axes.map((a) => Math.min(...a.levels)))) * 1000) / 10
+  const above = Math.round(Math.max(0, Math.max(...result.axes.map((a) => Math.max(...a.levels)))) * 1000) / 10
+  const levelText = (l: number) => `${l > 0 ? "+" : l < 0 ? "−" : ""}${num.format(Math.round(Math.abs(l) * 1000) / 10)} %`
   const valuesText = (cell: Cell) => cell.values.map((v) => num.format(v)).join(" · ")
 
   const revealed = (pos: number) => {
@@ -140,8 +143,8 @@ export function SensitivityView({
   if (report.ran > 0) {
     reading.push(
       t(
-        `Se probaron ${report.ran} combinaciones de ${names.join(" y ")}, desde un 20 % por debajo hasta un 20 % por encima de tus valores. ${report.profitable} de ellas (${pctOf(report.profitable / report.ran)}) terminaron con beneficio.`,
-        `${report.ran} combinations of ${names.join(" and ")} were tested, from 20 % below to 20 % above your values. ${report.profitable} of them (${pctOf(report.profitable / report.ran)}) ended with a profit.`
+        `Se probaron ${report.ran} combinaciones de ${names.join(" y ")}, desde un ${num.format(below)} % por debajo hasta un ${num.format(above)} % por encima de tus valores. ${report.profitable} de ellas (${pctOf(report.profitable / report.ran)}) terminaron con beneficio.`,
+        `${report.ran} combinations of ${names.join(" and ")} were tested, from ${num.format(below)} % below to ${num.format(above)} % above your values. ${report.profitable} of them (${pctOf(report.profitable / report.ran)}) ended with a profit.`
       )
     )
     if (report.baseReturnPct !== null && report.neighborReturnPct !== null) {
@@ -185,7 +188,7 @@ export function SensitivityView({
       more: t("Se reconoce por un único valor muy rentable rodeado de variantes mediocres o con pérdidas. Lo que funcionó en el pasado por coincidencia rara vez se repite.", "You spot it as a single very profitable value surrounded by mediocre or losing variants. What worked in the past by coincidence rarely repeats."),
     },
     {
-      term: t("Nivel (−20 % … +20 %)", "Level (−20 % … +20 %)"),
+      term: t(`Nivel (−${num.format(below)} % … +${num.format(above)} %)`, `Level (−${num.format(below)} % … +${num.format(above)} %)`),
       text: t("Cuánto se aleja cada parámetro de tu valor original.", "How far each parameter is from your original value."),
     },
   ]
@@ -240,16 +243,16 @@ export function SensitivityView({
               `Result: ${winning} of ${withSummary.length} variants make money. A wide green area (plateau) is a good sign; a single green spot surrounded by red means overfitting.`
             )
           : t(
-              `Probando ${result.cells.length} versiones de la estrategia cambiando ${names.join(" y ")} entre −20 % y +20 %. Empieza por la tuya (marcada) y se aleja.`,
-              `Trying ${result.cells.length} versions of the strategy, changing ${names.join(" and ")} between −20 % and +20 %. It starts at yours (marked) and moves away.`
+              `Probando ${result.cells.length} versiones de la estrategia cambiando ${names.join(" y ")} entre −${num.format(below)} % y +${num.format(above)} %. Empieza por la tuya (marcada) y se aleja.`,
+              `Trying ${result.cells.length} versions of the strategy, changing ${names.join(" and ")} between −${num.format(below)} % and +${num.format(above)} %. It starts at yours (marked) and moves away.`
             )
 
         return (
           <div className="grid lg:grid-cols-[minmax(0,1fr)_17.5rem]">
             <div className="flex min-w-0 flex-col gap-3 p-3 sm:p-4">
               <Narration icon={<SparklesIcon className="text-primary" />}>{narration}</Narration>
-              <div className="relative mx-auto w-full max-w-3xl">
-              <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={t("Mapa de calor del retorno según los parámetros", "Heat map of the return by parameters")}>
+              <div className="relative mx-auto mb-6 w-full max-w-3xl">
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible" role="img" aria-label={t("Mapa de calor del retorno según los parámetros", "Heat map of the return by parameters")}>
                 <VizDefs id={id} />
                 <defs>
                   <pattern id={`${id}-skip`} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">

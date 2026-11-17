@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { candlesPerDays, chosenTimeframes, engineCandles, neighborTimeframes, timeframeFits, sensitivityCells, sensitivityParams, windowBounds, windowCount } from "../src/lib/robustness-plan.ts";
+import { fitValue, valuesFromEdits, candlesPerDays, chosenTimeframes, engineCandles, neighborTimeframes, timeframeFits, sensitivityCells, sensitivityParams, windowBounds, windowCount } from "../src/lib/robustness-plan.ts";
 import type { Strategy } from "../src/lib/strategy.ts";
 
 // The expectations below are the same ones `apps/api/tests/test_robustness.py` checks: the web
@@ -82,4 +82,14 @@ test("chosen timeframes: the asked one plus the requested, in order, those that 
   assert.deepEqual(chosenTimeframes("1d", ["1M", "4h"], "2024-01-01", "2024-01-20"), ["4h", "1d"]);
   assert.equal(timeframeFits("1m", "2024-01-01", "2024-12-31"), false);
   assert.equal(timeframeFits("1d", "2024-01-01", "2024-12-31"), true);
+});
+
+test("typed values keep the original in the middle and stay inside the accepted range", () => {
+  const [period, value] = sensitivityParams(strategy);
+  assert.deepEqual(valuesFromEdits(period, [10, 5, 30, 20]), [5, 10, 14, 20, 30]);
+  assert.deepEqual(valuesFromEdits(value, [1, 20, 40, 5000]), [1, 20, 35, 40, 99]);
+  // A value on the wrong side of the original is moved to it.
+  assert.deepEqual(valuesFromEdits(period, [20, 10, 3, 15]), [10, 14, 14, 14, 15]);
+  assert.equal(fitValue(period, 2.6), 3);
+  assert.equal(fitValue(value, 1.234), 1.23);
 });

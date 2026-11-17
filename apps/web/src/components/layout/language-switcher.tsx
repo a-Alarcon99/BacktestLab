@@ -2,8 +2,10 @@
 
 import { Suspense } from "react"
 import { usePathname } from "next/navigation"
+import { ChevronDownIcon, GlobeIcon } from "lucide-react"
 import { cn } from "cn"
 import { useLocale } from "@/components/i18n/locale-provider"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { LOCALE_COOKIE, localizePath, locales, splitLocale, type Locale } from "@/lib/i18n"
 
 const names: Record<Locale, string> = { es: "Español", en: "English" }
@@ -14,7 +16,7 @@ function remember(locale: Locale) {
 }
 
 /**
- * ES / EN toggle: links to the same page in the other language and remembers the choice in a
+ * Language dropdown: links to the same page in the other language and remembers the choice in a
  * cookie, so `proxy.ts` sends unprefixed URLs (bookmarks, emails) to that language next time.
  */
 function LanguageSwitcher({ className }: { className?: string }) {
@@ -35,32 +37,34 @@ function CurrentPageLinks({ className }: { className?: string }) {
 function Links({ path, className }: { path: string; className?: string }) {
   const current = useLocale()
   return (
-    <nav
-      aria-label={current === "en" ? "Language" : "Idioma"}
-      className={cn("inline-flex rounded-lg bg-muted p-0.5", className)}
-    >
-      {locales.map((locale) => {
-        const active = locale === current
-        return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={current === "en" ? "Language" : "Idioma"}
+        className={cn(
+          "h-9 items-center gap-1.5 rounded-lg border bg-background px-2.5 text-caption font-semibold outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-muted",
+          className ?? "inline-flex"
+        )}
+      >
+        <GlobeIcon className="size-4 text-muted-foreground" />
+        <span className="uppercase">{current}</span>
+        <ChevronDownIcon className="size-3.5 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {locales.map((locale) => (
           // A plain <a>: the other language has its own root layout, so it is a full page load anyway.
-          <a
+          <DropdownMenuItem
             key={locale}
-            href={localizePath(locale, path)}
-            hrefLang={locale}
-            lang={locale}
-            title={names[locale]}
-            aria-current={active ? "true" : undefined}
+            render={<a href={localizePath(locale, path)} hrefLang={locale} lang={locale} />}
+            aria-current={locale === current ? "true" : undefined}
             onClick={() => remember(locale)}
-            className={cn(
-              "inline-flex h-7 items-center rounded-md px-2 text-caption font-semibold uppercase transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              active ? "bg-background text-foreground shadow-sm dark:bg-card" : "text-muted-foreground hover:text-foreground"
-            )}
+            className={locale === current ? "text-primary" : undefined}
           >
-            {locale}
-          </a>
-        )
-      })}
-    </nav>
+            <span className="w-6 text-caption uppercase text-muted-foreground">{locale}</span>
+            {names[locale]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

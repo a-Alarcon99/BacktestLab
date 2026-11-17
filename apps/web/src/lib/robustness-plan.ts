@@ -147,7 +147,30 @@ export type SensitivityParam = {
   base: number;
   /** Value at each of the `LEVELS`, rounded and kept inside what the parameter accepts. */
   values: number[];
+  /** Accepted range of the parameter, to keep the values the user types inside it. */
+  lo: number;
+  hi: number;
+  integer: boolean;
 };
+
+type Accepts = Pick<SensitivityParam, "lo" | "hi" | "integer">;
+
+/** A value kept inside what the parameter accepts and rounded, like the API's `fit_value`. */
+export function fitValue(param: Accepts, value: number): number {
+  const kept = Math.min(Math.max(value, param.lo), param.hi);
+  return param.integer ? Math.round(kept) : Math.round(kept * 100) / 100;
+}
+
+/**
+ * The five values to try from the four the user typed: two below the original and two above it,
+ * each side in ascending order. The original stays in the middle (the report compares with it).
+ */
+export function valuesFromEdits(param: Accepts & Pick<SensitivityParam, "base">, edits: number[]): number[] {
+  const fit = (value: number) => fitValue(param, value);
+  const below = edits.slice(0, 2).map((v) => Math.min(fit(v), param.base)).sort((a, b) => a - b);
+  const above = edits.slice(2, 4).map((v) => Math.max(fit(v), param.base)).sort((a, b) => a - b);
+  return [...below, param.base, ...above];
+}
 
 /** The parameters of the strategy's conditions the test can vary, in rule order. */
 export function sensitivityParams(strategy: Pick<Strategy, "rules">): SensitivityParam[] {
@@ -157,10 +180,7 @@ export function sensitivityParams(strategy: Pick<Strategy, "rules">): Sensitivit
       for (const tunable of TUNABLE[condition.kind] ?? []) {
         const base = (condition as unknown as Record<string, unknown>)[tunable.field];
         if (typeof base !== "number") continue; // e.g. a price change measured "since the entry"
-        const values = LEVELS.map((level) => {
-          const value = Math.min(Math.max(base * (1 + level), tunable.lo), tunable.hi);
-          return tunable.integer ? Math.round(value) : Math.round(value * 100) / 100;
-        });
+        const values = LEVELS.map((level) => fitValue(tunable, base * (1 + level)));
         found.push({
           // The API names fields in snake_case.
           id: `${ruleIndex}:${conditionIndex}:${tunable.field.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`)}`,
@@ -171,6 +191,9 @@ export function sensitivityParams(strategy: Pick<Strategy, "rules">): Sensitivit
           field: tunable.field,
           base,
           values,
+          lo: tunable.lo,
+          hi: tunable.hi,
+          integer: tunable.integer,
         });
       }
     });

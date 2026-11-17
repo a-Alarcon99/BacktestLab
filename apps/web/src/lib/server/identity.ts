@@ -16,6 +16,9 @@ export const GUEST_COOKIE = "bl_guest";
 const GUEST_MAX_AGE = 60 * 60 * 24 * 400;
 export const DEFAULT_USER_PLAN = "free";
 export const GUEST_PLAN = "guest";
+// Internal plan without quotas, for the owner's machine only: ignored unless ALLOW_ADMIN_PLAN=true
+// (never set in production), even if a row assigning it exists in the database.
+const ADMIN_PLAN = "admin";
 
 export type Plan = typeof plans.$inferSelect;
 
@@ -105,7 +108,8 @@ export async function resolveIdentity(options: { createGuest?: boolean } = {}): 
       .limit(1);
     // A paid plan only counts while it hasn't expired: expiry is evaluated on every request, so
     // access ends on time without any scheduled job.
-    const active = row && (row.expiresAt === null || row.expiresAt > new Date());
+    const allowed = row?.planId !== ADMIN_PLAN || process.env.ALLOW_ADMIN_PLAN === "true";
+    const active = row && allowed && (row.expiresAt === null || row.expiresAt > new Date());
     return {
       kind: "user",
       key: `u:${session.user.id}`,

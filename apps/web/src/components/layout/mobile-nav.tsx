@@ -47,7 +47,11 @@ export function MobileNav() {
               <LanguageSwitcher />
               <CurrencySwitcher />
             </div>
-            <div className="container-page py-4" onClick={() => setOpen(false)}>
+            {/* Only links and sign-out close the panel: the account menu and its pop-up are portaled children. */}
+            <div
+              className="container-page py-4"
+              onClick={(e) => (e.target as HTMLElement).closest("a, [data-close-menu]") && setOpen(false)}
+            >
               <UserMenu stacked />
             </div>
           </div>,

@@ -2,8 +2,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 
+import { eq } from "drizzle-orm";
+
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+import { backtestRuns, strategies, usageCounters, usageDaily } from "@/db/schema";
 import { sendVerificationEmail } from "@/lib/server/mail";
 
 export const auth = betterAuth({
@@ -17,6 +20,20 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
+  },
+  // Account deletion (the sessions, `user_plans` and credentials go with the user row through
+  // foreign keys): what is keyed by `u:<id>` has no foreign key, so it is removed here first.
+  user: {
+    deleteUser: {
+      enabled: true,
+      beforeDelete: async (user) => {
+        const key = `u:${user.id}`;
+        await db.delete(strategies).where(eq(strategies.ownerKey, key));
+        await db.delete(backtestRuns).where(eq(backtestRuns.subjectKey, key));
+        await db.delete(usageDaily).where(eq(usageDaily.subjectKey, key));
+        await db.delete(usageCounters).where(eq(usageCounters.subjectKey, key));
+      },
+    },
   },
   emailVerification: {
     sendOnSignUp: true,
@@ -42,6 +59,7 @@ export const auth = betterAuth({
       "/sign-in/email": { window: 300, max: 5 },
       "/sign-up/email": { window: 3600, max: 3 },
       "/forget-password": { window: 3600, max: 3 },
+      "/delete-user": { window: 3600, max: 3 },
       "/send-verification-email": { window: 3600, max: 3 },
     },
   },

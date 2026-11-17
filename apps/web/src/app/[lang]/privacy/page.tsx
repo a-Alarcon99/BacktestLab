@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { draftNotice } from "@/components/legal/draft-notice"
 import { LegalPage } from "@/components/legal/legal-page"
 import { siteConfig } from "@/config/site"
 import { getI18n } from "@/lib/i18n-server"
@@ -39,7 +38,6 @@ export default async function PrivacyPage() {
         "Esta política explica cómo trata BacktestLab tus datos personales conforme al Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.",
         "This policy explains how BacktestLab processes your personal data under Regulation (EU) 2016/679 (GDPR) and Spanish data protection law."
       )}
-      draftNotice={draftNotice(t)}
       sections={[
         {
           heading: t("Qué datos tratamos y para qué", "What data we process and why"),

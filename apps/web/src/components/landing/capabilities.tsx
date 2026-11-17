@@ -1,6 +1,8 @@
 import { ActivityIcon, CandlestickChartIcon, FilterIcon, GitMergeIcon, PercentIcon, ShieldCheckIcon, type LucideIcon } from "lucide-react"
+import { cn } from "cn"
 import { getI18n } from "@/lib/i18n-server"
 import { ConflictArt } from "./art/conflict-art"
+import { IndicatorsArt } from "./art/indicators-art"
 import { PatternArt } from "./art/pattern-art"
 import { SectionHeading } from "./section-heading"
 
@@ -21,6 +23,7 @@ async function Capabilities() {
       Icon: ActivityIcon,
       title: t("Indicadores técnicos", "Technical indicators"),
       text: t("Los clásicos, con sus parámetros a tu medida.", "The classics, with the settings you choose."),
+      art: <IndicatorsArt />,
       chips: ["RSI", "MACD", "SMA / EMA", "Bollinger", "Donchian", t("Volumen", "Volume"), t("Variación de precio", "Price change")],
     },
     {
@@ -82,7 +85,7 @@ async function Capabilities() {
                 <h3 className="font-bold">{title}</h3>
               </span>
               <p className="text-muted-foreground">{text}</p>
-              {art && <div className="mt-auto rounded-xl border bg-muted/30 p-3">{art}</div>}
+              {art && <div className={cn("rounded-xl border bg-muted/30 p-3", !chips && "mt-auto")}>{art}</div>}
               {chips && (
                 <ul className="mt-auto flex flex-wrap gap-1.5 pt-1">
                   {chips.map((chip) => (
