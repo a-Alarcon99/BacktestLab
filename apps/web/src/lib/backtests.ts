@@ -233,8 +233,11 @@ export type WindowsBatchResult = {
   prices: { time: string; close: number }[]
 }
 
-/** The strategy with one or two of its parameters varied ±20 %. `params` are `sensitivityParams` ids. */
-export type SensitivityBatchRequest = RobustBase & { kind: "sensitivity"; params: string[] }
+/**
+ * The strategy with one or two of its parameters varied (±20 % unless `values` says otherwise).
+ * `params` are `sensitivityParams` ids; `values` the five values to try of each, same order.
+ */
+export type SensitivityBatchRequest = RobustBase & { kind: "sensitivity"; params: string[]; values?: number[][] }
 export type SensitivityBatchResult = {
   kind: "sensitivity"
   axes: {
@@ -372,7 +375,7 @@ export type RobustRecord = {
   to: string
   strategy: Strategy
   /** What the test adds to the usual request (`lengthDays`/`stepDays` or `params`), to run it again. */
-  options: { lengthDays?: number; stepDays?: number; params?: string[]; timeframes?: Timeframe[] }
+  options: { lengthDays?: number; stepDays?: number; params?: string[]; values?: number[][]; timeframes?: Timeframe[] }
   score: number
   tone: Tone
   /** Report code ("consistent", "plateau", …), see `robustness-report.ts`. */
@@ -450,7 +453,7 @@ export function recordFromBatch(request: AssetsBatchRequest, result: AssetsBatch
 export function requestOfRobust(record: RobustRecord): RobustRequest {
   const base = { symbol: record.symbol, timeframe: record.timeframe, from: record.from, to: record.to, strategy: record.strategy }
   if (record.test === "windows") return { ...base, kind: "windows", lengthDays: record.options.lengthDays ?? 0, stepDays: record.options.stepDays ?? 0 }
-  if (record.test === "sensitivity") return { ...base, kind: "sensitivity", params: record.options.params ?? [] }
+  if (record.test === "sensitivity") return { ...base, kind: "sensitivity", params: record.options.params ?? [], ...(record.options.values ? { values: record.options.values } : {}) }
   return { ...base, kind: "timeframes", ...(record.options.timeframes ? { timeframes: record.options.timeframes } : {}) }
 }
 
@@ -466,7 +469,7 @@ export function recordFromRobust(request: RobustRequest, result: RobustResult): 
   if (request.kind === "sensitivity" && result.kind === "sensitivity") {
     const report = sensitivityReport(result)
     const base = result.cells.find((c) => c.coords.every((k) => k === CENTRE))?.summary
-    return { ...common, options: { params: request.params }, score: report.score, tone: report.tone, headline: report.headline, ran: report.ran, positive: report.profitable, curve: base?.curve ?? [] }
+    return { ...common, options: { params: request.params, ...(request.values ? { values: request.values } : {}) }, score: report.score, tone: report.tone, headline: report.headline, ran: report.ran, positive: report.profitable, curve: base?.curve ?? [] }
   }
   if (result.kind !== "timeframes") throw new Error("Mismatched robustness result")
   const report = timeframesReport(result, timeframe)

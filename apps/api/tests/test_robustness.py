@@ -169,6 +169,27 @@ def test_sensitivity_with_one_parameter_has_five_cells(client):
     assert all(c["error"] is None for c in body["cells"])
 
 
+def test_sensitivity_takes_the_values_typed_for_each_parameter(client):
+    typed = [[5, 10, 14, 30, 50], [20, 30, 35, 60, 90]]
+    body = batch(client, kind="sensitivity", params=["0:0:period", "0:0:value"], values=typed).json()
+    assert body["axes"][0]["values"] == [5, 10, 14, 30, 50]
+    assert body["axes"][1]["values"] == [20, 30, 35, 60, 90]
+    assert body["axes"][0]["levels"] == pytest.approx([5 / 14 - 1, 10 / 14 - 1, 0, 30 / 14 - 1, 50 / 14 - 1])
+
+
+def test_typed_values_stay_inside_what_the_parameter_accepts(client):
+    typed = [[0, 1, 14, 15, 5000]]
+    body = batch(client, kind="sensitivity", params=["0:0:period"], values=typed).json()
+    values = body["axes"][0]["values"]
+    assert values[0] >= 2 and values[-1] <= 500
+
+
+def test_sensitivity_needs_five_values_per_parameter(client):
+    assert batch(client, kind="sensitivity", params=["0:0:period"], values=[[1, 2, 3, 4, 5]] * 2).status_code == 422
+    assert batch(client, kind="sensitivity", params=["0:0:period"], values=[[1, 2, 3]]).status_code == 422
+    assert batch(client, kind="sensitivity", params=["0:0:period"], values=[[1, 2, 3, 4, -5]]).status_code == 422
+
+
 def test_unknown_parameter_is_rejected(client):
     assert batch(client, kind="sensitivity", params=["0:0:nope"]).status_code == 422
     assert batch(client, kind="sensitivity", params=["7:0:value"]).status_code == 422

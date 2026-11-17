@@ -1,4 +1,5 @@
 import { CoinsIcon, PlayIcon, WorkflowIcon } from "lucide-react"
+import { timeframes } from "@/lib/candles"
 import { getI18n } from "@/lib/i18n-server"
 import { BuilderArt } from "./art/builder-art"
 import { SectionHeading } from "./section-heading"
@@ -11,8 +12,8 @@ async function HowItWorks() {
       Icon: CoinsIcon,
       title: t("Elige activo y periodo", "Pick an asset and a period"),
       text: t(
-        "Cualquier criptomoneda del catálogo, el rango de fechas que quieras y 11 temporalidades.",
-        "Any cryptocurrency in the catalog, the date range you want and 11 timeframes."
+        `Cualquier criptomoneda del catálogo, el rango de fechas que quieras y ${timeframes.length} temporalidades.`,
+        `Any cryptocurrency in the catalog, the date range you want and ${timeframes.length} timeframes.`
       ),
     },
     {

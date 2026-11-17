@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { draftNotice } from "@/components/legal/draft-notice"
 import { LegalPage } from "@/components/legal/legal-page"
 import { getI18n } from "@/lib/i18n-server"
 import { pageMetadata } from "@/lib/seo"
@@ -81,7 +80,6 @@ export default async function CookiesPage() {
         "BacktestLab solo usa cookies y almacenamiento local estrictamente necesarios para prestar el servicio o recordar tus preferencias.",
         "BacktestLab only uses cookies and local storage that are strictly necessary to provide the service or remember your preferences."
       )}
-      draftNotice={draftNotice(t)}
       sections={[
         {
           heading: t("Qué usamos", "What we use"),

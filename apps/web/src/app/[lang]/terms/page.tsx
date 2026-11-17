@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { draftNotice } from "@/components/legal/draft-notice"
 import { LegalPage } from "@/components/legal/legal-page"
 import { getI18n } from "@/lib/i18n-server"
 import { pageMetadata } from "@/lib/seo"
@@ -29,7 +28,6 @@ export default async function TermsPage() {
         "Al crear una cuenta o usar BacktestLab aceptas estas condiciones. Si no estás de acuerdo, no uses el servicio.",
         "By creating an account or using BacktestLab you accept these terms. If you disagree, do not use the service."
       )}
-      draftNotice={draftNotice(t)}
       sections={[
         {
           heading: t("El servicio", "The service"),

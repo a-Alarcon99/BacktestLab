@@ -3,9 +3,10 @@
 import { useState } from "react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, Select } from "@/components/ui/input"
+import { Field } from "@/components/ui/input"
 import type { AssetInfo } from "@/lib/market"
 import { BacktestConfigCard } from "../backtest-config"
+import { AssetPicker } from "./asset-picker"
 
 /** One strategy on one asset, with the animation and the full report. */
 export function SingleAssetPanel({ assets, today }: { assets: AssetInfo[]; today: string }) {
@@ -21,14 +22,14 @@ export function SingleAssetPanel({ assets, today }: { assets: AssetInfo[]; today
           <CardTitle>{t("Activo", "Asset")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Field label={t("Activo a probar", "Asset to test")} htmlFor="hub-asset">
-            <Select id="hub-asset" name="asset" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-              {assets.map((a) => (
-                <option key={a.symbol} value={a.symbol}>
-                  {a.symbol} · {a.name}
-                </option>
-              ))}
-            </Select>
+          <Field
+            label={t("Activo a probar", "Asset to test")}
+            hint={t(
+              "Elige el activo sobre el que se ejecuta la estrategia.",
+              "Pick the asset the strategy runs on."
+            )}
+          >
+            <AssetPicker assets={assets} selected={[symbol]} onPick={setSymbol} />
           </Field>
         </CardContent>
       </Card>

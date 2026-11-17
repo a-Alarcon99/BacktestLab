@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.1 — Beta (2026-10-28)
+
+### Cuenta y acceso
+
+- **Plan `admin` solo en local**: la migración `0014` borra el plan `admin` (y sus asignaciones) de la base de datos, y
+  `resolveIdentity` lo ignora salvo con `ALLOW_ADMIN_PLAN=true` (solo en `.env.local`, nunca en producción). Para dárselo a
+  tu cuenta en local: `npm run admin:grant -- tu@correo.com` (`scripts/grant-admin.ts`). Hay que aplicar `npm run db:migrate`.
+- **Ver la contraseña**: botón de ojo en el campo de contraseña de «Entrar» y «Crear cuenta».
+- **Eliminar la cuenta**: el nombre del usuario en la cabecera abre un desplegable con «Eliminar cuenta», que pide
+  confirmación en una ventana emergente. Borra la cuenta, sus estrategias y sus contadores de uso (`user.deleteUser` de
+  Better Auth con `beforeDelete`); si la sesión es antigua pide volver a entrar antes.
+
+### Interfaz
+
+- **Cabecera**: idioma y divisa se eligen en sendos desplegables (nuevo `components/ui/dropdown-menu.tsx`).
+- **Landing**: la tarjeta «Indicadores técnicos» ya no deja un hueco en medio: lleva un dibujo de precio, media y RSI de un
+  tamaño parecido al de las animaciones de sus vecinas.
+- **Gráfica de precios del activo**: por defecto solo 5m, 1h, 4h y 1d; el resto de temporalidades están en «Más».
+- **Backtest de un activo**: el activo se elige con el mismo buscador y cuadrícula de «Varios activos» (componente común
+  `hub/asset-picker.tsx`), pero admite uno solo.
+
+### Legal
+
+- Fuera el texto «Borrador informativo…» del aviso legal, la política de privacidad, los términos y las cookies
+  (se elimina `components/legal/draft-notice.ts`), y la sección «Propiedad intelectual e industrial» del aviso legal.
+
+### Sensibilidad de parámetros
+
+- **Valores editables uno a uno**: cada parámetro elegido muestra cinco casillas: dos valores por debajo del original, el
+  original (fijo, en el centro, porque el informe compara con él) y dos por encima. Cada uno se escribe libremente, sin
+  saltos iguales; se mantienen dentro de lo que admite el parámetro y ordenados a cada lado. Campo `values` en la petición
+  (sustituye al `spreads` de esta misma versión; `fitValue` / `valuesFromEdits` en TS y `fit_value` / `axis_of` en Python,
+  tests en ambos lados); se guarda en el historial para repetir la prueba. Los textos de resultados usan el rango real.
+- **Animación**: la última fila de la matriz ya no se corta. El recuadro que contiene la animación es algo más alto
+  (margen inferior y SVG sin recorte), sin cambiar el tamaño de lo que se reproduce.
+
 ## 0.6.0 — Beta (2026-10-26)
 
 ### Corrección y mejora de las nuevas funcionalidades

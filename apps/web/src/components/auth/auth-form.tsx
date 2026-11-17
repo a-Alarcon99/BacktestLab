@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LoaderCircleIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from "lucide-react"
 import { useI18n } from "@/components/i18n/locale-provider"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -73,6 +73,7 @@ function AuthForm({ mode }: { mode: Mode }) {
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; terms?: string }>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [accepted, setAccepted] = useState(false)
   const [sentTo, setSentTo] = useState<string | null>(null)
 
@@ -183,15 +184,28 @@ function AuthForm({ mode }: { mode: Mode }) {
             htmlFor="password"
             hint={fieldError(errors.password) || (mode === "signup" ? t("Mínimo 8 caracteres.", "At least 8 characters.") : undefined)}
           >
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              maxLength={128}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                maxLength={128}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pr-11"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-pressed={showPassword}
+                aria-label={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
+                title={showPassword ? t("Ocultar contraseña", "Hide password") : t("Mostrar contraseña", "Show password")}
+                className="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {showPassword ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+              </button>
+            </div>
           </Field>
           {mode === "signup" && (
             <div className="flex flex-col gap-1.5">
